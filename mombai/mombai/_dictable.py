@@ -1,6 +1,8 @@
 from _collections_abc import dict_keys, dict_values
-from mombai._decorators import decorate, getargs
-from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist, dict_zip, dict_concat, dict_merge, data_and_columns_to_dict, dict_apply
+from mombai._decorators import decorate, getargs, try_back
+from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist, data_and_columns_to_dict 
+from mombai._dict_utils import dict_apply, dict_zip, dict_concat, dict_merge
+
 from mombai._dict import Dict, _relabel
 import numpy as np
 import pandas as pd
@@ -168,7 +170,7 @@ class Dictable(Dict):
             else:
                 res = function()
             return res
-        return decorate(wrapped, function)
+        return try_back(decorate)(wrapped, function)
 
     _precall = _vectorize
     
@@ -582,8 +584,17 @@ class Dictable(Dict):
         pair = self.pair(other, on_left, on_right)
         return self._join(pair, other, on_left, on_right, merge)
     
+    def __mul__(self, other):
+        return self.merge(other)
         
     def xor(self, other, on_left=None, on_right=None):
+        """
+        xor is an extremely useful function as, unlike left join, it tells us which original records we have not been able to match in other
+        >>> students = Dictable(name = ['Adam', 'Beth', 'Eve'])
+        >>> lunch = Dictable(name = ['Adam','Eve'], lunch = ['Bread', 'Apple'])
+        >>> students_who_didnt_eat = students.xor(lunch)
+        >>> assert eq(students_who_didnt_eat, Dictable(name = 'Beth'))
+        """
         other = type(self)(other)
         pair = self.pair(other, on_left, on_right)
         return self._left_xor(pair, other)
@@ -602,4 +613,8 @@ class Dictable(Dict):
         other = type(self)(other)
         pair = self.pair(other, on_left, on_right)
         return self._join(pair, other) + self._right_xor(pair, other)
+    
+    @property
+    def df(self):
+        return pd.DataFrame(self)
         

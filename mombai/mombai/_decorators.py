@@ -86,6 +86,8 @@ try_zero = try_value(0)
 try_str = try_value('')
 try_list = try_value([])
 try_dict = try_value({})
+try_false = try_value(False)
+try_true = try_value(True)
 
 def try_back(function):
     """

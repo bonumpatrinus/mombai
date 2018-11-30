@@ -1,7 +1,8 @@
 import datetime
 from dateutil import parser
-from mombai._periods import _ymd2dt, day, Month, BusinessDay
-
+from mombai._periods import _ymd2dt, day, Month, BusinessDay, bday, month, year
+from functools import reduce
+from operator import __add__
 """
 This module provides an easy function called dt:
 dt is a parsing function for dates
@@ -78,7 +79,13 @@ def dt(*args):
     >>> assert dt(bday) == today() + bday
     >>> assert dt(month) == today() + month
     >>> assert dt(datetime.timedelta(7)) == today() + datetime.timedelta(7)
+    >>> assert dt(dt(20000101), month) == dt(2000,2,1)
+    >>> assert dt(dt(20000101), 3*year, -month) == dt(2002,12,1)
     """
+    if len(args) == 0:
+        return dt(0)
+    if isinstance(args[0], datetime.datetime):
+        return reduce(__add__, args)
     if len(args) == 3:
         args = [int(a) for a  in args]
         return _ymd2dt(*args)
