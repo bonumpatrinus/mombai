@@ -42,7 +42,7 @@ but now this is applied per-row allowing us to track multiple experiments at the
 Since Dictable is a table, we also support fast ```apply, sort, groupby, pivot_table, merge``` and filtering as per pandas. It is important to realise Dictable is not pandas. The objects inside Dictable are not meant to be simply primitive types, but actually full objects. The keys are not meant to be columns, they are meant to be variable names. Dictable is more of a programming environment rather than a DataFrame. The operations groupby and listby then allow us to think of this as a map-reduce paradigm.
 
 ## RDDict (RDD of Dict)
-RDDDict is an abstraction layer over pyspark that support the same interface as Dictable allowing us to move from local calculations using Dictable to Spark calculation using pyspark and RDDict without any code-change.
+RDDict is an abstraction layer over pyspark that support the same interface as Dictable allowing us to move from local calculations using Dictable to Spark calculation using pyspark and RDDict without any code-change.
 
 ## Dictree (A tree is a dict of dicts)
 This class provides us with an ability to be declarative about our tree structures. Suppose we work with a tree like this: 
