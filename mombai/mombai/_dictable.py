@@ -146,13 +146,6 @@ class Dictable(Dict):
         This function try to run np.vectorize but resorts to line-by-line running if failed or if answer is not in right shape
         >>> d = Dictable(a = [1,2,3,4,5])
         >>> d.b = d[lambda a: range(a)]
-                
-        timeit.timeit('from numpy import mean, arrar; mean(merged.grades, axis=1)', number=10000)
-        
-        merged = Dictable(merged.items())
-        merged = merged(avg2 = lambda grades: np.mean(grades))
-        
-        Testing failure to np.vectorize:
         >>> vsum = d._vectorize(sum)
         >>> with pytest.raises(TypeError):
         >>>     sum(d.b)
