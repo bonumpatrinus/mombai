@@ -1,4 +1,4 @@
-from mombai._dictable import Dictable, Dict, as_ndarray, vstack, hstack
+from mombai._dictable import Dictable, Dict, as_ndarray, vstack, hstack, cartesian
 from mombai._containers import eq
 import pytest
 import numpy as np
@@ -220,5 +220,47 @@ def test_Dictable_unpivot():
     d = Dictable(a = range(5))        
     for b in range(5, 10):
         d[str(b)] = d.a * b
-    res = d.unpivot('a', 'b', 'axb').do(lambda value: int(value), 'b')
-    assert list(res.a * res.b) == list(res.axb)
+    res = d.unpivot('a', 'b', 'axb').do(int, 'b') ## unpivot and then casting to int
+    assert eq(res.a * res.b, res.axb) and len(res) == 25
+
+
+def test_Dictable_merge_0_keys():
+    a = Dictable(a = range(3))
+    b = Dictable(b = range(3,6))
+    c = a*b 
+    assert len(c) == len(a) * len(b) and list(c.a) == [0,0,0,1,1,1,2,2,2]
+    d = a.merge(b)
+    assert eq(c,d)
+
+
+def test_Dictable_0_keys_forced():
+    a = Dictable(a = range(3))
+    b = Dictable(a = range(3,6))
+    c = a.merge(b, []).sort('a')
+    assert len(c) == 9 and list(map(list,c.a)) == [[0, 3], [0, 4], [0, 5], [1, 3], [1, 4], [1, 5], [2, 3], [2, 4], [2, 5]]
+    
+def test_Dictable_merge_1_key():
+    a = Dictable(a = range(3))
+    b = Dictable(b = range(3,6), a = [1,2,3])
+    c = a*b 
+    assert eq(c, Dictable(a=[1,2], b=[3,4]))
+    
+def test_Dictable_multiple_keys():
+    a = Dictable(a = range(3), b = list('abc'), c = list('xyz'))
+    b = Dictable(a = [0,1], b=['a','x'], d = [1,2])
+    c = a*b
+    assert eq(c, Dictable(a=0, c='x', d=1, b='a'))
+
+def test_Dictable_xor():
+    students = Dictable(name = ['Adam', 'Beth', 'Eve'])
+    lunch = Dictable(name = ['Adam','Eve'], lunch = ['Bread', 'Apple'])
+    students_who_didnt_eat = students.xor(lunch)
+    assert eq(students_who_didnt_eat, Dictable(name = 'Beth'))
+
+def test_Dictable_right_xor():
+    students = Dictable(name = ['Adam', 'Beth', 'Eve'])
+    lunch = Dictable(name = ['Adam','Eve'], lunch = ['Bread', 'Apple'])
+    students_who_didnt_eat = lunch.right_xor(students)
+    assert eq(students_who_didnt_eat, Dictable(name = 'Beth'))
+
+    
