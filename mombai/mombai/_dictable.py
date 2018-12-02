@@ -1,13 +1,14 @@
 from _collections_abc import dict_keys, dict_values
 from mombai._decorators import decorate, getargs, try_back
-from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist, data_and_columns_to_dict 
-from mombai._dict_utils import dict_apply, dict_zip, dict_concat, dict_merge
+from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist 
+from mombai._dict_utils import dict_apply, dict_zip, dict_concat, dict_merge, data_and_columns_to_dict, items_to_tree, _pattern_to_item, _is_pattern, _as_pattern
 
 from mombai._dict import Dict, _relabel
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
 import numpy_indexed as npi
+from copy import copy
 
 def cartesian(*arrays):
     arrays = args_to_list(arrays)
@@ -252,6 +253,10 @@ class Dictable(Dict):
         >>> assert isinstance(res, list) and len(res)==2 and list(res[0]) == list(range(10))
         >>> res = d[lambda a,b: a % b]
         >>> assert list(res) == [0,1]*5
+        
+        access as tree:
+        >>> d = Dictable(name = ['abe', 'beth'], gender = ['m','f'])
+        >>> assert d['%name/%gender'] == dict(abe = 'm', beth = 'f')
         """
         if isinstance(item, (np.ndarray,slice)):
             return self._mask(item)
@@ -265,6 +270,8 @@ class Dictable(Dict):
             return self[item[0]][item[1]]
         elif isinstance(item, (list, dict_keys)):
             return type(self)(super(Dictable, self).__getitem__(item))
+        elif _is_pattern(item):
+            return self.to_tree(item)
         else:
             return super(Dictable, self).__getitem__(item)
     
@@ -607,7 +614,20 @@ class Dictable(Dict):
         pair = self.pair(other, on_left, on_right)
         return self._join(pair, other) + self._right_xor(pair, other)
     
-    @property
-    def df(self):
+    def to_df(self):
         return pd.DataFrame(self)
+    
+    def to_tree(self, pattern, tree = dict):
+        """
+        self = Dictable(name = ['alan', 'beth', 'charles'], surname = ['smith', 'jones', 'patel'], gender = ['m','f','m'])
+        t1 = self.to_tree(pattern = 'students/%name/%surname')
+        t2 = self['students/%name/%surname']
+        assert t1 == {'students': {'alan': 'smith', 'beth': 'jones', 'charles': 'patel'}}
+        assert t1 == t2
+        """
+        pattern = _as_pattern(pattern)
+        items = [_pattern_to_item(pattern, row) for row in self]
+        return items_to_tree(items = items, tree = tree)
+
+        
         
