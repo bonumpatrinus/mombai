@@ -216,8 +216,9 @@ def tree_items(tree, types = dict):
 
 
 def _is_pattern(pattern):
-    if isinstance(pattern, str):
-        pattern = pattern.split('/')
+    if not isinstance(pattern, str):
+        return False
+    pattern = pattern.split('/')
     if not max([p.startswith('%') for p in pattern]):
         return False
     if max(['%' in p[1:] for p in pattern]):

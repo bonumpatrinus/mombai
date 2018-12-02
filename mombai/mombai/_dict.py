@@ -19,7 +19,53 @@ def _relabel(key, relabels):
         return res
 
 
-class Dict(dict):
+class ADict(dict):
+    """
+    ADict is our base dict and inherits from dict with support to attribute access
+    >>> a = ADict(a = 1, b = 2)
+    >>> assert a['a'] == a.a
+    >>> a.c = 3
+    >>> assert a['c'] == 3
+    >>> del a.c
+    >>> assert list(a.keys()) == ['a','b']
+    >>> assert a['a','b'] == [1,2]
+    >>> assert a[['a','b']] == ADict(a = 1, b=2)
+    >>> assert not a == dict(a=1,b=2)
+    """
+    def __sub__(self, other):
+        return type(self)({key: value for key, value in self.items() if  key in self.keys() - other})
+    def __and__(self, other):
+        return type(self)({key: value for key, value in self.items() if  key in self.keys() & other})
+    def __add__(self, other):
+        res = self.copy()
+        res.update(other)
+        return res
+    def __dir__(self):
+        return list(self.keys()) + super(ADict, self).__dir__()
+    def __getattr__(self, attr):
+        return self[attr]
+    def __setattr__(self, attr, value):
+        self[attr] = value
+    def __delattr__(self, attr):
+        del self[attr]
+    def __getitem__(self, value):
+        if isinstance(value, tuple):
+            return [self[v] for v in value]
+        elif isinstance(value, (list, dict_keys)):
+            return type(self)({v: self[v] for v in value})
+        return super(ADict, self).__getitem__(value)
+    def keys(self):
+        return slist(super(ADict, self).keys())
+    def values(self):
+        return list(super(ADict, self).values())
+    def copy(self):
+        return type(self)(self)
+    def __deepcopy__(self, *args, **kwargs):
+        return type(self)({key : deepcopy(value) for key, value in self.items()})
+    def __eq__(self, other):
+        return eq(self, other)    
+
+class Dict(ADict):
     """
     Dict inherits from dict with some key additional features. 
     The aim is to transform dict into a mini "container of variables" in our research:
@@ -76,39 +122,9 @@ class Dict(dict):
     values = Dict()(**graph)
     
     In addition, there are a few features to quicken development:
-    d.map(function, **redirects) # equivalent to d[function] but allows parameter relabeling 
+    d.apply(function, **redirects) # equivalent to d[function] but allows parameter relabeling 
     d.do(functions, *keys, **redirects) # applies a sequence of function on multiple keys, each time mapping on the same original key
     """
-    def __sub__(self, other):
-        return type(self)({key: value for key, value in self.items() if  key in self.keys() - other})
-    def __and__(self, other):
-        return type(self)({key: value for key, value in self.items() if  key in self.keys() & other})
-    def __add__(self, other):
-        res = self.copy()
-        res.update(other)
-        return res
-    def __dir__(self):
-        return list(self.keys()) + super(Dict, self).__dir__()
-    def __getattr__(self, attr):
-        return self[attr]
-    def __setattr__(self, attr, value):
-        self[attr] = value
-    def __delattr__(self, attr):
-        del self[attr]
-    def __getitem__(self, value):
-        if isinstance(value, tuple):
-            return [self[v] for v in value]
-        elif isinstance(value, (list, dict_keys)):
-            return type(self)({v: self[v] for v in value})
-        elif callable(value):
-            return self.map(value)
-        return super(Dict, self).__getitem__(value)
-    def keys(self):
-        return slist(super(Dict, self).keys())
-    def values(self):
-        return list(super(Dict, self).values())
-    def copy(self):
-        return type(self)(self)
     def __call__(self, **functions):
         """
         d = Dict()(a = 1, b = 2, c = lambda a, b: a+b)
@@ -118,22 +134,33 @@ class Dict(dict):
             res[key] = res[value] if callable(value) else value
         return res
 
+    def __getitem__(self, value):
+        if isinstance(value, tuple):
+            return [self[v] for v in value]
+        elif isinstance(value, (list, dict_keys)):
+            return type(self)({v: self[v] for v in value})
+        elif callable(value):
+            return self.apply(value)
+        return super(Dict, self).__getitem__(value)
+
+
     def _precall(self, function):
         """
         This is a placeholder, allowing classes that inherit to apply vectorization/parallelization of the call method
         """
         return function    
 
-    def map(self, function, **relabels):
+    def apply(self, function, **relabels):
         """
         >>> d = Dict(a=1)
         >>> function = lambda x: x+2
-        >>> assert d.map(function, a='x') == 3
+        >>> assert d.apply(function, a='x') == 3
         """
         args = getargs(function)
         relabels = relabels.get('relabels', relabels)
         parameters = {_relabel(key, relabels): value for key, value in self.items() if _relabel(key, relabels) in args}
         return self._precall(function)(**parameters)
+
 
     def do(self, functions=None, *keys, **relabels):
         """
@@ -186,8 +213,3 @@ class Dict(dict):
             return self
         return type(self)({_relabel(key, relabels) : value for key, value in self.items()})  
 
-    def __deepcopy__(self, *args, **kwargs):
-        return type(self)({key : deepcopy(value) for key, value in self.items()})
-
-    def __eq__(self, other):
-        return eq(self, other)
