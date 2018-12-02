@@ -65,7 +65,7 @@ tree = dict(students = dict(id01 = dict(name = 'James', surname = 'Maxwell', cla
 ```
 
 At the heart of tree access is the idea that we can access elemets within a tree declaratively using a pattern:
-```'students/%id/classes/%subject/%grade'`` 
+```'students/%id/classes/%subject/%grade'``` 
 
 This means that we can instantiate a Dictable with 
 
