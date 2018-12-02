@@ -2,6 +2,7 @@ from mombai._dictable import Dictable, Dict, as_ndarray, vstack, hstack, cartesi
 from mombai._containers import eq
 import pytest
 import numpy as np
+import pandas as pd
 
 def test_Dictable__init__():
     d = Dictable(a = [1,2,3], b=2, c=[3,4,6])
@@ -10,6 +11,15 @@ def test_Dictable__init__():
     assert np.allclose(d.a, [1,2,3])
     assert np.allclose(d.b, [2,2,2])
     assert isinstance(d.b, np.ndarray)
+
+def test_Dictable__init__DataFrame():
+    df = pd.DataFrame(dict(a = [1,2,3], b=list('abc')))
+    assert eq(Dictable(df), Dictable(a = [1,2,3], b=list('abc')))
+    df = pd.DataFrame(dict(a = [1,2,3], b=list('abc'))).set_index('b')
+    assert eq(Dictable(df), Dictable(a = [1,2,3], b=list('abc')))
+    
+
+
 
 def test_Dictable__len__():
     import pytest

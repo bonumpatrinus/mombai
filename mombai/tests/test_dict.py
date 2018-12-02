@@ -1,7 +1,19 @@
-from mombai._dict import Dict, slist
+from mombai._dict import Dict, slist, ADict
 import pytest
 
 d = Dict(a=1, b=2, c=3, d=4)    
+
+def test_ADict():
+    a = ADict(a = 1, b = 2)
+    assert a['a'] == a.a
+    a.c = 3
+    assert a['c'] == 3
+    del a.c
+    assert list(a.keys()) == ['a','b']
+    assert a['a','b'] == [1,2]
+    assert a[['a','b']] == ADict(a = 1, b=2)
+    assert not a == dict(a=1,b=2)
+
 
 def test_Dict__add__():
     e = Dict(d = 5, e = 10)
@@ -75,9 +87,9 @@ def test_Dict__delattr___():
     del d.e
     assert d == Dict(a=1, b=2, c=3, d=4)    
 
-    
-def test_Dict__getitem___():
-    pass    
-    
-    
-    
+def test_Dict_apply():
+    assert d.apply(lambda a,b: a+b) == 3
+    assert d.apply(lambda a,b,x=1: a+b+x) == 4
+    with pytest.raises(TypeError):
+        d.apply(lambda x: x)
+

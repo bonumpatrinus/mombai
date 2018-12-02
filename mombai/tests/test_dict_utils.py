@@ -1,4 +1,8 @@
-from mombai._dict_utils import dict_zip, dict_concat, dict_merge, dict_append, dict_invert, dict_update_left, dict_update_right, dict_apply
+from mombai._dict_utils import dict_zip, dict_concat, dict_merge, dict_append, dict_invert, dict_update_left, dict_update_right, dict_apply, data_and_columns_to_dict
+from mombai._containers import eq
+import pandas as pd
+import numpy as np
+
 
 def test_dict_concat():
     dicts = [dict(name = 'James', surname='Smith', salary=100), dict(name = 'Adam', surname='Smith', status='dead'), dict(name = 'Adam', surname='Feingold', salary = 200, status='alive')]    
@@ -54,3 +58,14 @@ def test_dict_merge():
     assert dict_merge(dicts, 'l') == {'a': 1, 'b': 4, 'c': 7, 'z' : 3, 'y' : 2,  'x' : 1}
     assert dict_merge(dicts, 'l', policies = dict(x = 'a', y='c')) ==  {'a': 1, 'b': 4, 'c': 7, 'z' : 3, 'y' : [None, 2, None],  'x' : [1]}
 
+def test_data_and_columns_to_dict():
+    data = pd.DataFrame(dict(a = [1,2,3]))
+    assert data_and_columns_to_dict(data) == dict(a = [1,2,3])
+    data = [dict(a=1, b=2), dict(a=3, b=4)]
+    assert data_and_columns_to_dict(data) == {'a': [1, 3], 'b': [2, 4]}
+    data = dict(a=dict(b=1, c=2), d = dict(e=3, f=4, g=5))
+    assert data_and_columns_to_dict(data, '%x/%y/%z') == {'x': ['a', 'a', 'd', 'd', 'd'], 'y': ['b', 'c', 'e', 'f', 'g'], 'z': [1, 2, 3, 4, 5]}
+    data = [('a', 1), ('b', 2)]
+    assert data_and_columns_to_dict(data) == dict(a=1,b=2)
+    data = [['a','b'], [1,2],[3,4]]
+    assert eq(data_and_columns_to_dict(data),  {'a': np.array([1, 3]), 'b': np.array([2, 4])})
