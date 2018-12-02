@@ -71,7 +71,10 @@ This means that we can instantiate a Dictable with
 
 ```
 d = Dictable(data = tree, columns = 'students/%id/classes/%subject/%grade')
-assert eq(d, Dictable(id = ['id01', 'id01', 'id02', 'id02'], subject = ['maths', 'physics', 'maths', 'economics'], grades = [95,99,92,97]))
+result = Dictable(id = ['id01', 'id01', 'id02', 'id02'], 
+                  subject = ['maths', 'physics', 'maths', 'economics'], 
+                  grades = [95,99,92,97])
+assert eq(d, result)
 ```
 
 Conversely, we can project back to the tree by 
