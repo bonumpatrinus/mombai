@@ -44,9 +44,10 @@ Since Dictable is a table, we also support fast ```apply, sort, groupby, pivot_t
 ## RDDict (RDD of Dict)
 RDDict is an abstraction layer over pyspark that support the same interface as Dictable allowing us to move from local calculations using Dictable to Spark calculation using pyspark and RDDict without any code-change.
 
-## Dictree (A tree is a dict of dicts)
-This class provides us with an ability to be declarative about our tree structures. Suppose we work with a tree like this: 
+## Dictable and Trees (dict of dicts) 
+Dictable provides us with an ability to be declarative about our tree structures. Suppose we work with a tree like this: 
 ```
+tree = 
 students:
   id01:
     name: James
@@ -61,13 +62,18 @@ students:
         maths: 82
         economics: 97
 ```
-In Dictree's heart is the idea that we can access elemets declaratively using:
-```tree['students/%id/classes/%subject/%grade']``` which can be interpreted to access a Dictable with this values:
-```[dict(id = 'id01', subject = 'maths', grade= 99), dict(id = 'id01', subject = 'phyics', grade= 95), ...]```
+At the heart of tree access is the idea that we can access elemets within a tree declaratively using a pattern:
+```'students/%id/classes/%subject/%grade'``` 
 
-And indeed, this then allows us to support declarative tree construction like this:
+This means that we can instantiate a Dictable with 
+
+```d = Dictable(tree, 'students/%id/classes/%subject/%grade')```
+
+Conversely, we can project back to the tree by 
+
 ```
-tree['students/%id/average/%grade'] = tree['students/%id/classes/%subject/%grade'].groupby('id').apply(np.mean, 'grade')
+grades = d['students/%id/classes/%subject/%grade'] # or
+grades = d.to_tree('students/%id/classes/%subject/%grade')
 ```
 
 
