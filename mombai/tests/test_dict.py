@@ -48,7 +48,6 @@ def test_dict_do():
     assert e.do([int, lambda value, a: value-int(a)], 'b','c') == Dict(a = '1', b=20, c=30)
 
 
-    
 def test_dict_relabel():
     assert d.relabel(b = 'bb', c=lambda value: value.upper()) == Dict(a = 1, bb=2, C=3, d=4)
     assert d.relabel(relabels = dict(b='bb', c=lambda value: value.upper())) == Dict(a=1, bb=2, C=3, d=4)

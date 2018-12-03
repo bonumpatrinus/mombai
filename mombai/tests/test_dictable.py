@@ -10,15 +10,13 @@ def test_Dictable__init__():
     assert isinstance(d, dict)
     assert np.allclose(d.a, [1,2,3])
     assert np.allclose(d.b, [2,2,2])
-    assert isinstance(d.b, np.ndarray)
+    assert isinstance(d.b, list)
 
 def test_Dictable__init__DataFrame():
     df = pd.DataFrame(dict(a = [1,2,3], b=list('abc')))
     assert eq(Dictable(df), Dictable(a = [1,2,3], b=list('abc')))
     df = pd.DataFrame(dict(a = [1,2,3], b=list('abc'))).set_index('b')
     assert eq(Dictable(df), Dictable(a = [1,2,3], b=list('abc')))
-    
-
 
 
 def test_Dictable__len__():
@@ -51,9 +49,9 @@ def test_Dictable_mask():
 
 def test_Dictable__setitem__():
     d = Dictable(a = [1,2,3,4,5])
-    assert isinstance(d.a, np.ndarray)
+    assert isinstance(d.a, list)
     d['b'] = 1
-    assert isinstance(d.b, np.ndarray) and len(d.b) == 5
+    assert isinstance(d.b, list) and len(d.b) == 5
     with pytest.raises(ValueError):
         d['c'] = [1,2]
 
@@ -61,7 +59,7 @@ def test_Dictable_vectorize():
     d = Dictable(a = [1,2,3,4,5])
     d.b = d[lambda a: range(a)]
     vsq = d._vectorize(lambda x: x**2)
-    assert np.allclose(vsq(d.a), d.a**2) 
+    assert np.allclose(vsq(d.a), np.array(d.a)**2) 
     vsum = d._vectorize(sum)
     with pytest.raises(TypeError):
         sum(d.b)
@@ -92,18 +90,18 @@ def test_Dictableinc():
 
 def test_Dictable__getitem__():
     d = Dictable(a = range(10), b=[1,2]*5)
-    assert list(d[d.a>5].a) == [6,7,8,9]
+    assert list(d[np.array(d.a)>5].a) == [6,7,8,9]
     assert list(d[np.array([0,1])].a) == [0,1]
     assert list(d[range(2)].a) == [0,1]
     assert d[0] == Dict(a=0, b=1)
     assert d[-1] == Dict(a=9, b=2)
     res = d[dict(a = [1,2])]
     assert list(res.a) == [1,2]
-    res = d[d.a>5, 'a'] 
+    res = d[np.array(d.a)>5, 'a'] 
     assert list(res) == [6,7,8,9]
-    res = d[d.a>5, ['a','b']]
+    res = d[np.array(d.a)>5, ['a','b']]
     assert isinstance(res, Dictable) and res.shape == (4,2) and list(res.a) == [6,7,8,9]
-    res = d[d.a>5, lambda a, b: a+b]
+    res = d[np.array(d.a)>5, lambda a, b: a+b]
     assert list(res) == [6+1,7+2,8+1,9+2]
     res = d['a']
     assert list(res) == list(range(10))
@@ -144,7 +142,7 @@ def test_Dictable__sub__():
     
 def test_Dictable_sort():
     d = Dictable(a = list('abracadabra'), b=range(11), c = range(0,33,3))
-    d.c = d.c % 11
+    d.c = np.array(d.c) % 11
     res = d.sort('c')
     assert list(res.c) == list(range(11))
     d = d.sort('a','c')
@@ -229,9 +227,10 @@ def test_Dictable_join():
 def test_Dictable_unpivot():
     d = Dictable(a = range(5))        
     for b in range(5, 10):
-        d[str(b)] = d.a * b
-    res = d.unpivot('a', 'b', 'axb').do(int, 'b') ## unpivot and then casting to int
-    assert eq(res.a * res.b, res.axb) and len(res) == 25
+        d[str(b)] = np.array(d.a) * b
+    res = d.unpivot('a', 'b', 'axb')
+    res = res.do(int, 'b') ## unpivot and then casting to int
+    assert eq(np.array(res.a) * np.array(res.b), np.array(res.axb)) and len(res) == 25
 
 
 def test_Dictable_merge_0_keys():

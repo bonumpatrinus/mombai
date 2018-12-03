@@ -49,7 +49,7 @@ def test_as_ndarray():
     assert np.all(np.array([1,2]) == as_ndarray(np.array([1,2])))
     assert np.all(np.array(['a']) == as_ndarray(dict(a=1).keys()))
     assert np.all(np.array([0,1,2])== as_ndarray(range(3)))
-    assert eq(as_ndarray(['a',[1,2]]), np.array(['a',[1,2]], dtype='object'))
+    assert eq(x = as_ndarray(['a',[1,2]]), y = np.array(['a',[1,2]], dtype='object'))
 
 
 def test_args_to_dict():
