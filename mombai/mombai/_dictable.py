@@ -1,6 +1,6 @@
 from _collections_abc import dict_keys, dict_values
 from mombai._decorators import decorate, getargs, try_back
-from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist 
+from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist , _getitem_as_array, concat
 from mombai._dict_utils import dict_apply, dict_zip, dict_concat, dict_merge, data_and_columns_to_dict, items_to_tree, _pattern_to_item, _is_pattern, _as_pattern
 
 from mombai._dict import Dict, _relabel
@@ -22,8 +22,8 @@ def cartesian(*arrays):
 def hstack(value):
     return np.asarray(value).T if len(value)>1 else value[0]
 
-vstack = np.concatenate
-    
+vstack = concat
+
 class Dictable(Dict):
     """
     Dict is a "calculation graph" allowing us to interactively calculate additional values and store output in the Dict
@@ -44,7 +44,7 @@ class Dictable(Dict):
         kwargs.update(data_and_columns_to_dict(data,columns))
         super(Dictable, self).__init__(kwargs)
         for key, value in self.items():
-            super(Dictable, self).__setitem__(key, as_ndarray(value))
+            super(Dictable, self).__setitem__(key, as_list(value))
         n = len(self)
         for key, value in self.items():
             self.__setitem__(key, value, n)
@@ -100,7 +100,7 @@ class Dictable(Dict):
             mask = as_ndarray(mask)
             if exc:
                 mask = ~mask
-        return type(self)({key : self[key][mask] for key in self.keys()})
+        return type(self)({key : _getitem_as_array(self[key],mask) for key in self.keys()})
 
     def get(self, key, *value):
         """
@@ -114,7 +114,7 @@ class Dictable(Dict):
             if len(value):
                 return value[0]
             else:
-                return np.array([None]*len(self))
+                return [None]*len(self)
 
 
     def __setitem__(self, key, value, n = None):
@@ -132,12 +132,12 @@ class Dictable(Dict):
         >>> with pytest.raises(ValueError):
         >>>     d['b'] = [1,2]
         """
-        value = as_ndarray(value)
+        value = as_list(value)
         n = n or len(self)
         if len(value)==n or len(self.keys()) == 0:
             pass
         elif len(value)== 1:
-            value = np.concatenate([value] * n)
+            value = value * n
         else:
             raise ValueError('cannot set item of mismatched length %s to array of size %s'%(len(value), n))
         super(Dictable, self).__setitem__(key, value)
@@ -256,12 +256,10 @@ class Dictable(Dict):
         
         access as tree:
         >>> d = Dictable(name = ['abe', 'beth'], gender = ['m','f'])
-        >>> assert d['%name/%gender'] == dict(abe = 'm', beth = 'f')
+        >>> d['%name/%gender'] == dict(abe = 'm', beth = 'f')
         """
-        if isinstance(item, (np.ndarray,slice)):
+        if isinstance(item, (np.ndarray,slice, range)):
             return self._mask(item)
-        elif isinstance(item, range):
-            return self._mask(np.array(item))
         elif isinstance(item, int):
             return Dict({key : value[item] for key, value in self.items()})
         elif isinstance(item, dict):
@@ -284,17 +282,18 @@ class Dictable(Dict):
     
         If you have two Dictables that you want to merge horizontally, use e.g. lhs.merge(rhs), lhs.left_join(rhs) etc
 
-        >>> self = Dictable(a=[1,2,3,], b=5, d='hi')
+        >>> self = Dictable(a=[1,2,3,], b=[[5]], d='hi')
         >>> other = Dictable(a=3, b= ['a','b'], c=1)
+        >>> others = (other,)
         >>> res = self.concat(other)
         >>> assert list(res.d) == ['hi'] * 3 + [None] * 2
         >>> assert list(res.c) == [None] * 3 + [1] * 2        
         """
         others = args_to_list(others)
         others = [type(self)(other) for other in others]
-        res = dict_concat([self] + others)
-        res = dict_apply(dict_concat([self] + others), np.concatenate)
-        return type(self)(res)
+        concated = dict_concat([self] + others)
+        merged = dict_apply(concated, concat)
+        return type(self)(merged)
 
     __add__ = concat
     __add__.__doc__ = """
@@ -338,8 +337,10 @@ class Dictable(Dict):
 
     def sort(self, *by):
         """
+        >>> from mombai import *
+        >>> import numpy as np
         >>> d = Dictable(a = [_ for _ in 'abracadabra'], b=range(11), c = range(0,33,3))
-        >>> d.c = d.c % 11
+        >>> d.c = np.array(d.c) % 11
         >>> res = d.sort('c')
         >>> assert list(res.c) == list(range(11))
         
@@ -477,9 +478,9 @@ class Dictable(Dict):
         yvals = self.keys() - index  
         n = len(yvals)
         m = len(self)
-        res = type(self)({key : np.concatenate([self[key]]*n) for key in index})
+        res = type(self)({key : concat([self[key]]*n) for key in index})
         res[columns] = sum([[y] * m for y in yvals], [])
-        res[values] = np.concatenate([self[y] for y in yvals])
+        res[values] = concat([self[y] for y in yvals])
         return res
  
     def _on_left_and_on_right(self, other, on_left=None, on_right=None):
@@ -530,8 +531,7 @@ class Dictable(Dict):
         >>> assert list(map(list, res.a)) == [[1, 4], [2, 3], [3, 2], [4, 1]]
         >>> assert set(res.d) == {'d'} and set(res.e) == {'e'}       
         """
-        res = pair._mask(pair.rhs_len>0)
-        res = res._mask(res.lhs_len>0)
+        res = pair.exc(rhs_len=0).exc(lhs_len=0)
         res = res(pairs = lambda lhs_idx, rhs_idx: cartesian(lhs_idx, rhs_idx))
         lhs_idx, rhs_idx = np.concatenate(res.pairs).T
         dicts = [self._mask(lhs_idx), other._mask(rhs_idx)]
@@ -540,15 +540,13 @@ class Dictable(Dict):
         return type(self)(dict_apply(merged, hstack, {col : None for col in duplicate_columns}))
 
     def _left_xor(self, pair, other):
-        res = pair._mask(pair.rhs_len>0, True)
-        res = res._mask(res.lhs_len>0)
-        lhs_idx = np.concatenate(res.lhs_idx)
+        res = pair.inc(rhs_len=0).exc(lhs_len=0)
+        lhs_idx = concat(res.lhs_idx)
         return self._mask(lhs_idx)
 
     def _right_xor(self, pair, other):
-        res = pair._mask(pair.rhs_len>0)
-        res = res._mask(res.lhs_len>0, True)
-        rhs_idx = np.concatenate(res.rhs_idx)
+        res = pair.exc(rhs_len=0).inc(lhs_len=0)
+        rhs_idx = concat(res.rhs_idx)
         return other._mask(rhs_idx)
 
     def merge(self, other, on_left=None, on_right=None, merge='a'):
