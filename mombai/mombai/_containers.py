@@ -108,7 +108,7 @@ def eq(x, y):
     elif isinstance(x, dict):
         if type(x) == type(y) and len(x)==len(y):
             xkey, xval = zip(*sorted(x.items()))
-            ykey, yval = zip(*sorted(x.items()))
+            ykey, yval = zip(*sorted(y.items()))
             return eq(xkey, ykey) and eq(np.array(xval, dtype='object'), np.array(yval, dtype='object'))
         else:
             return False
