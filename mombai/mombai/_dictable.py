@@ -168,20 +168,6 @@ class Dictable(Dict):
 
     _precall = _vectorize
     
-    #def apply(self, function, relabels):
-    #    """
-    #    >>> d = Dictable(a=1)
-    #   >>> function = lambda x: x+2
-    #    >>> assert np.allclose(d.apply(function, a='x'), [3])
-    #    >>> assert np.allclose(d.apply(function, relabels = dict(a = 'x')), [3])
-    #    >>> d = Dictable(a = range(10))
-    #    >>> assert np.allclose(d.apply(lambda a: a**2), as_ndarray(range(10))**2)
-    #    """
-    #    args = getargs(function)
-    #    relabels = relabels.get('relabels', relabels)
-    #    parameters = {_relabel(key, relabels): value for key, value in self.items() if _relabel(key, relabels) in args}
-    #    return self._precall(function)(**parameters)
-
     def _inc_or_exc(self, exc, *functions, **filters):
         res = self.copy()
         for function in args_to_list(functions):
