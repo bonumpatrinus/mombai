@@ -17,6 +17,13 @@ def dict_zip(d, dict_type=None):
 def pass_thru(x):
     return x
 
+def first(x):
+    return x[0]
+
+def last(x):
+    return x[-1]
+
+
 def dict_apply(d, func=None, funcs=None):
     """
     apply a function to dict values, funcs provide functionality for overriding the function for specific values. 

@@ -1,6 +1,7 @@
 from _collections_abc import dict_keys
 from mombai._containers import slist, as_list, args_zip, args_to_list, eq
 from mombai._decorators import getargs, try_list
+from mombai._dict_utils import pass_thru, first, last
 from copy import deepcopy
 
 def _relabel(key, relabels):
@@ -9,7 +10,16 @@ def _relabel(key, relabels):
     >>> assert _relabel('a', relabels) == 'a'
     >>> assert _relabel('b', relabels) == 'BB'
     >>> assert _relabel('c', relabels) == 'C'
+    >>> assert _relabel(dict(a = 1, b=2, c=3), relabels) == {'a': 1, 'BB': 2, 'C': 3}
+    >>> assert _relabel(dict(a = 1, b=2, c=3), lambda label: label*2) == {'aa': 1, 'bb': 2, 'cc': 3}
+    >>> assert _relabel('label_volatility', 'market') == 'market_volatility'
     """
+    if isinstance(key, dict):
+        return type(key)({_relabel(k, relabels) : v for k, v in key.items()})
+    if isinstance(relabels, str):
+        return key.replace('label', relabels)
+    if callable(relabels):
+        return relabels(key)
     if key not in relabels:
         return key
     res = relabels[key]
@@ -19,17 +29,17 @@ def _relabel(key, relabels):
         return res
 
 
-class ADict(dict):
+class Dictattr(dict):
     """
-    ADict is our base dict and inherits from dict with support to attribute access
-    >>> a = ADict(a = 1, b = 2)
+    Dictattr is our base dict and inherits from dict with support to attribute access
+    >>> a = Dictattr(a = 1, b = 2)
     >>> assert a['a'] == a.a
     >>> a.c = 3
     >>> assert a['c'] == 3
     >>> del a.c
     >>> assert list(a.keys()) == ['a','b']
     >>> assert a['a','b'] == [1,2]
-    >>> assert a[['a','b']] == ADict(a = 1, b=2)
+    >>> assert a[['a','b']] == Dictattr(a = 1, b=2)
     >>> assert not a == dict(a=1,b=2)
     """
     def __sub__(self, other):
@@ -41,7 +51,7 @@ class ADict(dict):
         res.update(other)
         return res
     def __dir__(self):
-        return list(self.keys()) + super(ADict, self).__dir__()
+        return list(self.keys()) + super(Dictattr, self).__dir__()
     def __getattr__(self, attr):
         return self[attr]
     def __setattr__(self, attr, value):
@@ -53,11 +63,11 @@ class ADict(dict):
             return [self[v] for v in value]
         elif isinstance(value, (list, dict_keys)):
             return type(self)({v: self[v] for v in value})
-        return super(ADict, self).__getitem__(value)
+        return super(Dictattr, self).__getitem__(value)
     def keys(self):
-        return slist(super(ADict, self).keys())
+        return slist(super(Dictattr, self).keys())
     def values(self):
-        return list(super(ADict, self).values())
+        return list(super(Dictattr, self).values())
     def copy(self):
         return type(self)(self)
     def __deepcopy__(self, *args, **kwargs):
@@ -65,7 +75,7 @@ class ADict(dict):
     def __eq__(self, other):
         return eq(self, other)    
 
-class Dict(ADict):
+class Dict(Dictattr):
     """
     Dict inherits from dict with some key additional features. 
     The aim is to transform dict into a mini "container of variables" in our research:
@@ -125,13 +135,46 @@ class Dict(ADict):
     d.apply(function, **redirects) # equivalent to d[function] but allows parameter relabeling 
     d.do(functions, *keys, **redirects) # applies a sequence of function on multiple keys, each time mapping on the same original key
     """
-    def __call__(self, **functions):
+    def __call__(self, *relabels, **functions):
         """
-        d = Dict()(a = 1, b = 2, c = lambda a, b: a+b)
+        The call function allows us to assign to new keys, new values:
+        >>> d = Dict(a = 1)
+        >>> d = d(b = 2)
+        >>> assert d == Dict(a=1,b=2)
+        
+        
+        In addition, we can add new columns using functions of existing columns:
+        >>> d = d(c = lambda a, b: a+b)
+        >>> assert d == Dict(a=1,b=2,c=3)
+        
+        Sometime, we may have an existing function that we want to use. In which case we can map the function's args to the keys:
+        >>> def add(x,y):
+        >>>    return x+y
+        >>> d = d(dict(x='a',y='b', z='c'), z = add) # note that we are allowed to re-label the return key as well!
+        >>> assert d == Dict(a=1,b=2,c=3)
+
+        We allow us to actually loop over multiple keys and run the function twice: 
+        >>> d = d(dict(x='a',y='b',z='c'), dict(x='c',y='b',z='d'), z = add)
+        >>> assert d == Dict(a=1, b=2, c=3, d=5)
+
+        The final functionality is not for the faint of hearts. Using 'label' in the args of the function is treated as a special case. Allowing us to write succinctly: 
+            
+        >>> d = Dict(a=1,b=2,c=3)
+        >>> d = d('b', 'c', label2 = lambda label: label**2)
+        >>> assert d == Dict(a=1,b=2,c=3, b2=4, c2=9)
+        >>> d = d('b','c', label_cubed_plus_a = lambda label, label2, a: label2 * label+a)
+        >>> assert d == Dict({'a': 1, 'b': 2, 'c': 3, 'b2': 4, 'c2': 9, 'b_cubed_plus_a': 9, 'c_cubed_plus_a': 28})
+
         """
         res = self.copy()
+        if len(relabels) == 0:
+            relabels = [pass_thru]
         for key, value in functions.items():
-            res[key] = res[value] if callable(value) else value
+            if callable(value):
+                for relabel in relabels:
+                    res[_relabel(key, relabel)] = res.apply(value, relabel)
+            else:
+                res[key] = value
         return res
 
     def __getitem__(self, value):
@@ -150,39 +193,55 @@ class Dict(ADict):
         """
         return function    
 
-    def apply(self, function, **relabels):
+    def apply(self, function, relabels=None):
         """
-        >>> d = Dict(a=1)
+        >>> self = Dict(a=1)
         >>> function = lambda x: x+2
-        >>> assert d.apply(function, a='x') == 3
+        >>> assert self.apply(f, relabels = dict(x = 'a')) == 3
+        >>> g = lambda col: col + 2
+        >>> assert self.apply(g, lambda arg: arg.replace('col', 'a')) == 3
+        
         """
         args = getargs(function)
-        relabels = relabels.get('relabels', relabels)
-        parameters = {_relabel(key, relabels): value for key, value in self.items() if _relabel(key, relabels) in args}
+        relabels = relabels or {}
+        args2keys = {arg : _relabel(arg, relabels) for arg in args}
+        parameters = {arg : self[key] for arg, key in args2keys.items() if key in self}
         return self._precall(function)(**parameters)
 
 
     def do(self, functions=None, *keys, **relabels):
         """
-        Many times we want to apply a collection of function on multiple keys. e.g.
+        Many times we want to apply a collection of function on multiple keys, 
+        returning the resulting value to the same key. E.g.
         we read some data as text and and then parse and finally, just the year:
-
-        d['issue_date'] = parse_as_date(d['issue_date'])
-        d['maturity'] = parse_as_date(d['maturity'])
-        d['issue_date'] = to_year(d['issue_date'])
-        d['maturity'] = to_year(d['maturity'])
-
-        instead you can:
-        d = d.do([parse_as_date, to_year], 'maturity', 'issue_date')
+            
+        >>> from dateutil import parser
+        >>> to_year = lambda date: date.year
+        >>> from mombai import Dict
+        
+        >>> d1 = Dict(issue_date = '1st Jan 2001', maturity = '2nd Feb 2010')
+        >>> d2 = Dict(issue_date = '1st Jan 2001', maturity = '2nd Feb 2010')
+        
+        >>> d1['issue_date'] = parser.parse(d1['issue_date'])
+        >>> d1['maturity'] = parser.parse(d1['maturity'])
+        >>> d1['issue_date'] = to_year(d1['issue_date'])
+        >>> d1['maturity'] = to_year(d1['maturity'])
+        
+        #instead you can:
+        >>> d2 = d2.do([parser.parse, to_year], 'maturity', 'issue_date')
+        >>> assert d1 == d2
+        
         
         >>> d = Dict(a=1, b=2, c=3)
         >>> d = d.do(str, 'a', 'b', 'c')
         >>> assert d == Dict(a = '1', b='2', c='3')
-        
         >>> d = d.do(lambda value, a: value+a, ['b', 'c'])
         >>> assert d == Dict(a = '1', b='21', c='31')        
         >>> assert d.do([int, lambda value, a: value-int(a)], 'b','c') == Dict(a = '1', b=20, c=30)
         
+        >>> d = Dict(a=1,b=2,c=3)
+        >>> assert d.do(lambda value, other: value+other, 'b','c', other = 'a') == Dict(a=1,b=3,c=4)
+        >>> assert d.do(lambda value, other: value+other, 'b','c', relabels = lambda arg: arg.replace('other', 'a')) == Dict(a=1,b=3,c=4)
         """
         res = self.copy()
         keys = slist(args_to_list(keys))
@@ -193,8 +252,8 @@ class Dict(ADict):
                 raise ValueError('cannot apply args both in the function args and in the keys that need to be done as result is then order-of-operation sensitive %s'%(keys & args))
             func = res._precall(function)
             for key in keys:
-                pass
-                parameters = {_relabel(key, relabels): value for key, value in res.items() if _relabel(key, relabels) in args}
+                args2keys = {arg : _relabel(arg, relabels) for arg in args}
+                parameters = {arg : self[key] for arg, key in args2keys.items() if key in self}
                 res[key] = func(res[key], **parameters)
         return res
     
