@@ -1,17 +1,27 @@
-from mombai._dict import Dict, slist, ADict
+from mombai._dict import Dict, slist, Dictattr, _relabel
 import pytest
 
 d = Dict(a=1, b=2, c=3, d=4)    
 
-def test_ADict():
-    a = ADict(a = 1, b = 2)
+def test_relabel():
+    relabels = dict(b='BB', c = lambda value: value.upper())
+    assert _relabel('a', relabels) == 'a'
+    assert _relabel('b', relabels) == 'BB'
+    assert _relabel('c', relabels) == 'C'
+    assert _relabel(dict(a = 1, b=2, c=3), relabels) == {'a': 1, 'BB': 2, 'C': 3}
+    assert _relabel(dict(a = 1, b=2, c=3), lambda label: label*2) == {'aa': 1, 'bb': 2, 'cc': 3}
+    assert _relabel('label_volatility', 'market') == 'market_volatility'
+    
+
+def test_Dictattr():
+    a = Dictattr(a = 1, b = 2)
     assert a['a'] == a.a
     a.c = 3
     assert a['c'] == 3
     del a.c
     assert list(a.keys()) == ['a','b']
     assert a['a','b'] == [1,2]
-    assert a[['a','b']] == ADict(a = 1, b=2)
+    assert a[['a','b']] == Dictattr(a = 1, b=2)
     assert not a == dict(a=1,b=2)
 
 

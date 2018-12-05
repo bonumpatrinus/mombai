@@ -68,8 +68,8 @@ def test_Dictable_vectorize():
 def test_Dictable_apply():
     d = Dictable(a=1)
     function = lambda x: x+2
-    assert np.allclose(d.apply(function, a='x'), [3])
-    assert np.allclose(d.apply(function, relabels = dict(a = 'x')), [3])
+    assert np.allclose(d.apply(function, lambda arg: arg.replace('x','a')), [3])
+    assert np.allclose(d.apply(function, dict(x = 'a')), [3])
     d = Dictable(a = range(10))
     assert np.allclose(d.apply(lambda a: a**2), as_ndarray(range(10))**2)
 
@@ -109,6 +109,14 @@ def test_Dictable__getitem__():
     assert isinstance(res, list) and len(res)==2 and list(res[0]) == list(range(10))
     res = d[lambda a,b: a % b]
     assert list(res) == [0,1]*5
+
+def test_Dictable__call__():
+    d = Dictable(a=[1,2,3], b=[4,5,6])
+    d = d('a','b',label2 = lambda label: label**2, c=3)
+    assert eq(d, Dictable(a=[1,2,3], b=[4,5,6], a2=[1,4,9], b2=[16,25,36], c=[3,3,3]))
+    d = d({'x':'a'}, a3 = lambda x: x**3)
+    assert d.a3 == [1,8,27]
+
 
 def test_Dictable_concat():
     self = Dictable(a=[1,2,3,], b=5, d='hi')
