@@ -1,6 +1,7 @@
 import datetime
 from dateutil import parser
-from mombai._periods import _ymd2dt, day, Month, BusinessDay, bday, month, year
+from mombai._periods import _ymd2dt, day, Month, BusinessDay
+import numpy as np
 from functools import reduce
 from operator import __add__
 """
@@ -30,8 +31,8 @@ def _int2dt(arg=0):
         d = (arg % 100)
         return _ymd2dt(y,m,d)
     else:
-        raise ValueError("cannot convert %s to a date"%arg)
-        
+        return datetime.datetime.utcfromtimestamp(arg)
+
 
 def _str2dt(arg):
     """
@@ -84,7 +85,14 @@ def dt(*args):
     """
     if len(args) == 0:
         return dt(0)
-    if isinstance(args[0], datetime.datetime):
+    if isinstance(args[0], np.datetime64):
+        y = args[0].astype('datetime64[Y]').astype(int) + 1970
+        month_start = args[0].astype('datetime64[M]')
+        m = month_start.astype(int) % 12  + 1
+        d = (args[0] - month_start).astype('timedelta64[D]').astype(int) + 1
+        hms = datetime.timedelta(args[0].astype(float) % 1)
+        return reduce(__add__, args[1:], datetime.datetime(y, m, d) + hms)
+    elif isinstance(args[0], datetime.datetime):
         return reduce(__add__, args)
     if len(args) == 3:
         args = [int(a) for a  in args]

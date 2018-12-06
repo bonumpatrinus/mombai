@@ -73,7 +73,14 @@ class Dictattr(dict):
     def __deepcopy__(self, *args, **kwargs):
         return type(self)({key : deepcopy(value) for key, value in self.items()})
     def __eq__(self, other):
-        return eq(self, other)    
+        return eq(self, other)
+    def __getstate__(self):
+        return dict(self)
+    def __setstate__(self, d):
+        self.update(d)
+    def __dict__(self):
+        return dict(self)
+
 
 class Dict(Dictattr):
     """

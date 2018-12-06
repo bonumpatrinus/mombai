@@ -24,6 +24,9 @@ def hstack(value):
 
 vstack = concat
 
+def _as_txt(x, max_rows = 5, max_width=50):
+    return '\n'.join(row[:max_width] for row in str(x).split('\n')[:max_rows])
+
 class Dictable(Dict):
     """
     Dict is a "calculation graph" allowing us to interactively calculate additional values and store output in the Dict
@@ -259,7 +262,8 @@ class Dictable(Dict):
         else:
             return super(Dictable, self).__getitem__(item)
     
-    def concat(self, *others):
+    @classmethod
+    def concat(cls, *others):
         """
         Unlike pd.concat, is a simple extension of dict_concat.
         1) the resulting keys are the union of all keys 
@@ -276,14 +280,13 @@ class Dictable(Dict):
         >>> assert list(res.c) == [None] * 3 + [1] * 2        
         """
         others = args_to_list(others)
-        others = [type(self)(other) for other in others]
-        concated = dict_concat([self] + others)
+        others = [cls(other) for other in others]
+        concated = dict_concat(others)
         merged = dict_apply(concated, concat)
-        return type(self)(merged)
+        return cls(merged)
 
-    __add__ = concat
-    __add__.__doc__ = """
-        
+    def add(self, other):
+        """
         Adding together two tables will be done vertically, with the keys being the union of both tables and None entered where one table has a key and the other does not:
         
         >>> from mombai import *    
@@ -292,8 +295,9 @@ class Dictable(Dict):
         >>> z = x+y
         >>> assert sorted(z.keys()) == ['a','b','c']
         >>> assert list(z.a) == [1,2,3,1,2,3] and list(z.c) == [None, None, None, 4, 5, 6] and list(z.b) == [4, 5, 6, None, None, None]
-    """
-
+        """
+        return type(self).concat(self, other)
+        
     def __sub__(self, other):
         return Dictable({key : value for key, value in self.items() if key not in as_list(other)})
 
@@ -305,15 +309,16 @@ class Dictable(Dict):
         return x
     
     def __str__(self, max_rows=0):
+        txt = self.do(_as_txt, self.keys())
         if len(self)<=abs(max_rows) or not max_rows:
-            return self.PrettyTable(border=False).__str__()
+            return txt.PrettyTable(border=False).__str__()
         else:
-            top = self[:int(max_rows)] if max_rows>0 else self[int(max_rows):]
+            top = txt[:int(max_rows)] if max_rows>0 else self[int(max_rows):]
             pt = top.PrettyTable(border=False).__str__()
             return '\n'.join([pt ,'...%i rows...'%len(self)])
         
     def __repr__(self):
-        return 'Dictable[%s x %s] '%self.shape + '\n%s'%self.__str__(3)
+        return 'Dictable[%s x %s] '%self.shape + '\n%s'%self.__str__(5)
     
     def _GroupBy(self, *keys):
         """
