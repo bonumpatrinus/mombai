@@ -143,8 +143,6 @@ def relabel(key, relabels):
     >>> assert relabeled_func(1,2,3) == 6
     >>> assert relabeled_func(a=1,BB=2,C=3)==6
     """
-    if relabels is None:
-        return key
     if isinstance(key, dict):
         return type(key)({relabel(k, relabels) : v for k, v in key.items()})
     elif isinstance(key, (list, tuple)):
@@ -153,6 +151,8 @@ def relabel(key, relabels):
         return key
     elif callable(key):
         return support_kwargs(relabels)(key)
+    elif relabels is None:
+        return key
     if isinstance(relabels, str):
         return key.replace('label', relabels)
     if callable(relabels):
@@ -164,6 +164,7 @@ def relabel(key, relabels):
         return res(key)
     else:
         return res
+    
 
 def support_kwargs(relabels=None):
     """
