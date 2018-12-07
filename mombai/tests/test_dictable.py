@@ -121,7 +121,7 @@ def test_Dictable__call__():
 def test_Dictable_concat():
     self = Dictable(a=[1,2,3,], b=5, d='hi')
     other = Dictable(a=3, b= ['a','b'], c=1)
-    res = self.concat(other)
+    res = Dictable.concat(self, other)
     assert list(res.d) == ['hi'] * 3 + [None] * 2
     assert list(res.c) == [None] * 3 + [1] * 2
 
@@ -129,17 +129,17 @@ def test_Dictable_concat_multiple():
     self = Dictable(a=[1,2,3,], b=5, d='hi')
     other = Dictable(a=3, b= ['a','b'], c=1)
     another = Dictable(a=4, d= ['a','b'], f=1)
-    res = self.concat(other, another)
+    res = Dictable.concat(self, other, another)
     assert list(res.d) == ['hi'] * 3 + [None] * 2 + ['a','b']
     assert list(res.c) == [None] * 3 + [1] * 2 + [None, None]
-    res = self.concat([other, another])
+    res = Dictable.concat([self, other, another])
     assert list(res.d) == ['hi'] * 3 + [None] * 2 + ['a','b']
     assert list(res.c) == [None] * 3 + [1] * 2 + [None, None]
 
 def test_Dictable__add__():
     self = Dictable(a=[1,2,3,], b=5, d='hi')
     other = Dictable(a=3, b= ['a','b'], c=1)
-    res = self + other
+    res = Dictable.concat(self, other)
     assert list(res.d) == ['hi'] * 3 + [None] * 2
     assert list(res.c) == [None] * 3 + [1] * 2
 
