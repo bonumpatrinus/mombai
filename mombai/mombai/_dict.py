@@ -2,6 +2,7 @@ from _collections_abc import dict_keys
 from mombai._containers import slist, as_list, args_zip, args_to_list, eq
 from mombai._decorators import getargs, try_list, decorate, support_kwargs, relabel
 from mombai._dict_utils import pass_thru, first, last
+from functools import partial
 from copy import deepcopy
 
 class Dictattr(dict):
@@ -55,6 +56,39 @@ class Dictattr(dict):
         self.update(d)
     def __dict__(self):
         return dict(self)
+
+
+def _where(cond, key, value):
+    """
+    We are getting into serious argpspec messing territory
+    
+    def where(self, cond, key = lambda a, b: a +b):
+        self[key] = where(cond, key, function)(self[key], **self)
+    """
+    condition = relabel(cond if callable(cond) else partial(eq, y = cond))
+    function = relabel(value if callable(value) else lambda : value)
+    def wrapped(*args, **kwargs):
+        if condition(*args, **{k:v for k,v in kwargs.items() if k!=key}):
+            return args[0]
+        else:
+            return function(**kwargs)
+    return wrapped        
+
+def _mask(cond, key, value):
+    """
+    We are getting into serious argpspec messing territory
+    
+    def where(self, cond, key = lambda a, b: a +b):
+        self[key] = where(cond, key, function)(self[key], **self)
+    """
+    condition = relabel(cond if callable(cond) else partial(eq, y = cond))
+    function = relabel(value if callable(value) else lambda : value)
+    def wrapped(*args, **kwargs):
+        if condition(*args, **{k:v for k,v in kwargs.items() if k!=key}):
+            return function(**kwargs)
+        else:
+            return args[0]
+    return wrapped
 
 
 class Dict(Dictattr):
@@ -173,7 +207,7 @@ class Dict(Dictattr):
         """
         Make the function being able to take more that just the key words needed and relabel the internal parameters
         """
-        return relabel(function, relabels)
+        return function
 
     def apply(self, function, relabels=None):
         """
@@ -182,7 +216,7 @@ class Dict(Dictattr):
         >>> assert self.apply(function, relabels = dict(a = 'x')) == 3
         >>> assert self.apply(function, relabels = lambda arg: arg.replace('a', 'x')) == 3
         """
-        return self._precall(function, relabels)(**self)
+        return self._precall(relabel(function, relabels))(**self)
                 
 
     def do(self, functions=None, *keys, **relabels):
@@ -223,11 +257,41 @@ class Dict(Dictattr):
         keys = slist(args_to_list(keys))
         relabels = relabels.get('relabels', relabels)
         for function in as_list(functions):
-            func = res._precall(function, relabels)
+            func = res._precall(relabel(function, relabels))
             for key in keys:
-                res[key] = func(res[key], **self)
+                res[key] = func(res[key], **(res-key))
         return res
-    
+
+    def where(self, cond, **functions):
+        """
+        >>> d = Dict(a = None, b=None, c='1')
+        >>> x = d.where('not me', a=0, b=1, c=2)
+        >>> assert x == Dict(a=0, b=1, c=2)
+        >>> y = d.mask(lambda value: value is not None, a=0, b=1, c=2)
+        >>> assert y == Dict(a=None, b=None, c=2)
+        """
+        res = self.copy()
+        for key, value in functions.items():
+            res[key]= self._precall(_where(cond, key, value))(res[key], **res)
+        return res
+
+    def mask(self, cond, **functions):
+        """
+        >>> d = Dict(a = None, b=None, c='not none ') 
+        >>> x = d.mask(None, a=0, b=1, c=2) # if key is None, return 0 to column a, 1 to b etc..
+        >>> assert x == Dict(a = 0, b = 1, c = 'not none ')
+        
+        >>> y = d.mask(lambda col: not isinstance(col, int), a=0, b=1, c=2)
+        >>> assert y == Dict(a = 0, b = 1, c = 2)
+        
+        >>> z = d.mask(None, a = lambda c: c*2) # if a is None, return c*2
+        >>> assert z == Dict({'a': 'not none not none ', 'b': None, 'c': 'not none '})
+        """
+        res = self.copy()
+        for key, value in functions.items():
+            res[key] = self._precall(_mask(cond, key, value))(res[key], **res)
+        return res
+
     def relabel(self, **relabels):
         """quick functionality to relabel the keys
         if existing key is not in the relabels, it stays the same

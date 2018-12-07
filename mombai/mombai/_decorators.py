@@ -12,7 +12,7 @@ else:
 
 def argspec_update(argspec, **kwargs):
     """
-    Allows us to copy an argspec, updating specific parameters specified in kwargs
+    Allows us to copy an existing argspec, updating specific parameters specified in kwargs
     """
     tp = type(argspec)
     params = {key : getattr(argspec, key) for key in dir(tp) if not key.startswith('_') and key not in ('count','index')}
@@ -113,7 +113,7 @@ def try_back(function):
             return args[0] if args else kwargs[getargs(function)[0]]
     return decorate(wrapped, function)
 
-def relabel(key, relabels):
+def relabel(key, relabels=None):
     """
     relabel does quite a few things
     

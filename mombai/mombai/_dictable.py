@@ -169,7 +169,7 @@ class Dictable(Dict):
             else:
                 res = function()
             return res
-        return support_kwargs(relabels)(try_back(decorate)(wrapped, function))
+        return try_back(decorate)(wrapped, function)
 
     _precall = _vectorize
     
