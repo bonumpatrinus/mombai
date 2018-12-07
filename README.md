@@ -32,6 +32,7 @@ or indeed:
 ```
 x = Dict(a=5, b=2)(c = lambda a, b: a+b)(d = lambda c, b: c+b)(e = lambda c, d: c+d)
 ```
+Dict supports some pandas functionality, namely ```mask``` and ```where```.
 
 ## Dictable (Dict and a Table)
 Dictable inherits from Dict so has this nice calculation framework but is also a column-based table, with each key being a vector of equal length. The code to track additional variables still looks like:
@@ -39,7 +40,9 @@ Dictable inherits from Dict so has this nice calculation framework but is also a
 x = x(c = lambda a, b: a+b)(d = lambda c, b: c+b)(e = lambda c, d: c+d)
 ```
 but now this is applied per-row allowing us to track multiple experiments at the same time.
-Since Dictable is a table, we also support fast ```apply, sort, groupby, pivot_table, merge``` and filtering as per pandas. It is important to realise Dictable is not pandas. The objects inside Dictable are not meant to be simply primitive types, but actually full objects. The keys are not meant to be columns, they are meant to be variable names. Dictable is more of a programming environment rather than a DataFrame. The operations groupby and listby then allow us to think of this as a map-reduce paradigm.
+Since Dictable is a table, we also support fast ```apply, sort, groupby, pivot_table, merge, where and mask``` with an interface very similar to pandas. It also supports filtering either directly ```table[mask_of_booleans]``` or using the simpler ```inc, exc``` methods (e.g. ```table.exc(key = None)``` will exclude rows where key is None).
+
+It is important to realise Dictable is not pandas. The objects inside Dictable are not meant to be simply primitive types, but actually full objects. The keys are not meant to be columns, they are meant to be variable names. Dictable is more of a programming environment rather than a DataFrame.
 
 ### Dictable and Trees (dict of dicts) 
 Dictable provides us with an ability to be declarative about our tree structures. Suppose we work with a yaml-tree like this: 
