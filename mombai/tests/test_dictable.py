@@ -37,7 +37,7 @@ def test_Dictable__iter__():
     iters = [row for row in d]
     assert iters == [Dict({'a': 1, 'b': 2, 'c': 3}), Dict({'a': 2, 'b': 2, 'c': 4}), Dict({'a': 3, 'b': 2, 'c': 6})]
 
-def test_Dictable_mask():
+def test_Dictable__mask():
     d = Dictable(a = [1,2,3], b=2, c=[3,4,6])
     subset = d._mask([True, True, False])
     assert len(subset) == 2
@@ -280,4 +280,17 @@ def test_Dictable_right_xor():
     students_who_didnt_eat = lunch.right_xor(students)
     assert eq(students_who_didnt_eat, Dictable(name = 'Beth'))
 
-    
+def test_Dictable_mask():
+    d = Dictable(a = [None, None], b=[None, 2], c= [1, '2'])
+    assert d.mask(None, a=0, b=1, c=2) == Dictable(a = [0,0], b=[1,2], c = [1, '2'])
+    y = d.mask(lambda value: value is None, a=0, b=lambda c: c*2, c=2)
+    assert y == Dictable(a = 0, b=2, c = [1, '2'])
+
+def test_Dict_where():
+    d = Dictable(a = [None, 'not me'], b=[None, 2], c= [1, '2'])
+    x = d.where('not me', a=0, b=1, c=2)
+    assert x == Dictable(a=[0,'not me'], b=1, c=2)
+    y = d.mask(lambda value: value is not None, a=0, b=1, c=2)
+    assert y == Dictable(a=[None,0], b=[None,1], c=2)
+
+

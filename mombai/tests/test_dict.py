@@ -90,6 +90,7 @@ def test_Dict__delattr___():
     assert d == Dict(a=1, b=2, c=3, d=4)    
 
 def test_Dict_apply():
+    d = Dict(a=1, b=2, c=3, d=4)    
     assert d.apply(lambda a,b: a+b) == 3
     assert d.apply(lambda a,b,x=1: a+b+x) == 4
     with pytest.raises(TypeError):
@@ -100,3 +101,19 @@ def test_Dict_relabel():
     assert d.relabel(relabels = lambda x: x*2) == Dict(aa=1, bb=2, cc=3)
     assert d.relabel(b='BB') == Dict(a=1, BB=2, c=3)
     assert d.relabel(b='BB', c = lambda x: x+'rap') == Dict(a=1, BB=2, crap=3)
+    
+
+def test_Dict_mask():
+    d = Dict(a = None, b=None, c='1')
+    x = d.mask(None, a=0, b=1, c=2)
+    assert x == Dict(a=0, b=1, c='1')
+    y = d.mask(lambda value: value is None, a=0, b=lambda c: c*2, c=2)
+    assert y == Dict(a=0, b='11', c='1')
+
+def test_Dict_where():
+    d = Dict(a = None, b=None, c='1')
+    x = d.where('not me', a=0, b=1, c=2)
+    assert x == Dict(a=0, b=1, c=2)
+    y = d.mask(lambda value: value is not None, a=0, b=1, c=2)
+    assert y == Dict(a=None, b=None, c=2)
+    
