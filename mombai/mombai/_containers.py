@@ -40,6 +40,13 @@ def as_ndarray(value):
 def as_type(value):
     return value if isinstance(value, type) else type(value)
 
+
+def as_str(value, max_rows = None, max_chars = None):
+    if max_rows is None and max_chars is None:
+        return value.__str__()
+    else:
+        return '\n'.join([row[:max_chars] for row in value.__str__().split('\n')[:max_rows]])
+
 def _eq_attrs(x, y, attrs):
     for attr in attrs:
         if hasattr(x, attr) and not eq(getattr(x, attr), getattr(y, attr)):

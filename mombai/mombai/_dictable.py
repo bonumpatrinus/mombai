@@ -1,16 +1,18 @@
-from _collections_abc import dict_keys, dict_values
-from mombai._decorators import decorate, getargs, try_back
-from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist , _getitem_as_array, concat
+from _collections_abc import dict_keys
+from mombai._decorators import decorate, try_back, support_kwargs, relabel
+from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist , _getitem_as_array, concat, as_str
 from mombai._dict_utils import dict_apply, dict_zip, dict_concat, dict_merge, data_and_columns_to_dict, items_to_tree, _pattern_to_item, _is_pattern, _as_pattern
-
-from mombai._dict import Dict, _relabel
+from mombai._dict import Dict
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
 import numpy_indexed as npi
-from copy import copy
+from functools import partial
 
 def cartesian(*arrays):
+    """
+    Creates a cartesian product of multiple arrays, we only use it for 2-d cartesian product in practice
+    """
     arrays = args_to_list(arrays)
     shape = (len(x) for x in arrays)
     ix = np.indices(shape, dtype=int)
@@ -24,8 +26,8 @@ def hstack(value):
 
 vstack = concat
 
-def _as_txt(x, max_rows = 5, max_width=50):
-    return '\n'.join(row[:max_width] for row in str(x).split('\n')[:max_rows])
+_str_5x50 = partial(as_str, max_rows = 5, max_chars = 50)
+
 
 class Dictable(Dict):
     """
@@ -145,7 +147,7 @@ class Dictable(Dict):
             raise ValueError('cannot set item of mismatched length %s to array of size %s'%(len(value), n))
         super(Dictable, self).__setitem__(key, value)
 
-    def _vectorize(self, function):
+    def _vectorize(self, function, relabels=None):
         """
         This function try to run np.vectorize but resorts to line-by-line running if failed or if answer is not in right shape
         >>> d = Dictable(a = [1,2,3,4,5])
@@ -167,7 +169,7 @@ class Dictable(Dict):
             else:
                 res = function()
             return res
-        return try_back(decorate)(wrapped, function)
+        return support_kwargs(relabels)(try_back(decorate)(wrapped, function))
 
     _precall = _vectorize
     
@@ -285,7 +287,7 @@ class Dictable(Dict):
         merged = dict_apply(concated, concat)
         return cls(merged)
 
-    def add(self, other):
+    def __add__(self, other):
         """
         Adding together two tables will be done vertically, with the keys being the union of both tables and None entered where one table has a key and the other does not:
         
@@ -296,7 +298,7 @@ class Dictable(Dict):
         >>> assert sorted(z.keys()) == ['a','b','c']
         >>> assert list(z.a) == [1,2,3,1,2,3] and list(z.c) == [None, None, None, 4, 5, 6] and list(z.b) == [4, 5, 6, None, None, None]
         """
-        return type(self).concat(self, other)
+        return Dictable.concat(self, other)
         
     def __sub__(self, other):
         return Dictable({key : value for key, value in self.items() if key not in as_list(other)})
@@ -308,15 +310,14 @@ class Dictable(Dict):
             x.add_row(row.values())
         return x
     
-    def __str__(self, max_rows=0):
-        txt = self.do(_as_txt, self.keys())
-        if len(self)<=abs(max_rows) or not max_rows:
-            return txt.PrettyTable(border=False).__str__()
+    def __str__(self, max_rows=None):
+        if not max_rows or len(self)<=abs(max_rows):
+            return self.do(_str_5x50, self.keys()).PrettyTable(border=False).__str__()
         else:
-            top = txt[:int(max_rows)] if max_rows>0 else self[int(max_rows):]
-            pt = top.PrettyTable(border=False).__str__()
+            top = self[:max_rows] if max_rows>0 else self[max_rows:]
+            pt = top.do(_str_5x50, self.keys()).PrettyTable(border=False).__str__()
             return '\n'.join([pt ,'...%i rows...'%len(self)])
-        
+
     def __repr__(self):
         return 'Dictable[%s x %s] '%self.shape + '\n%s'%self.__str__(5)
     

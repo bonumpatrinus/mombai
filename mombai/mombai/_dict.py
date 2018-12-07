@@ -1,33 +1,8 @@
 from _collections_abc import dict_keys
 from mombai._containers import slist, as_list, args_zip, args_to_list, eq
-from mombai._decorators import getargs, try_list
+from mombai._decorators import getargs, try_list, decorate, support_kwargs, relabel
 from mombai._dict_utils import pass_thru, first, last
 from copy import deepcopy
-
-def _relabel(key, relabels):
-    """
-    >>> relabels = dict(b='BB', c = lambda value: value.upper())
-    >>> assert _relabel('a', relabels) == 'a'
-    >>> assert _relabel('b', relabels) == 'BB'
-    >>> assert _relabel('c', relabels) == 'C'
-    >>> assert _relabel(dict(a = 1, b=2, c=3), relabels) == {'a': 1, 'BB': 2, 'C': 3}
-    >>> assert _relabel(dict(a = 1, b=2, c=3), lambda label: label*2) == {'aa': 1, 'bb': 2, 'cc': 3}
-    >>> assert _relabel('label_volatility', 'market') == 'market_volatility'
-    """
-    if isinstance(key, dict):
-        return type(key)({_relabel(k, relabels) : v for k, v in key.items()})
-    if isinstance(relabels, str):
-        return key.replace('label', relabels)
-    if callable(relabels):
-        return relabels(key)
-    if key not in relabels:
-        return key
-    res = relabels[key]
-    if not isinstance(res, str) and callable(res):
-        return res(key)
-    else:
-        return res
-
 
 class Dictattr(dict):
     """
@@ -178,8 +153,8 @@ class Dict(Dictattr):
             relabels = [pass_thru]
         for key, value in functions.items():
             if callable(value):
-                for relabel in relabels:
-                    res[_relabel(key, relabel)] = res.apply(value, relabel)
+                for r in relabels:
+                    res[relabel(key, r)] = res.apply(value, r)
             else:
                 res[key] = value
         return res
@@ -194,27 +169,21 @@ class Dict(Dictattr):
         return super(Dict, self).__getitem__(value)
 
 
-    def _precall(self, function):
+    def _precall(self, function, relabels=None):
         """
-        This is a placeholder, allowing classes that inherit to apply vectorization/parallelization of the call method
+        Make the function being able to take more that just the key words needed and relabel the internal parameters
         """
-        return function    
+        return relabel(function, relabels)
 
     def apply(self, function, relabels=None):
         """
         >>> self = Dict(a=1)
         >>> function = lambda x: x+2
-        >>> assert self.apply(f, relabels = dict(x = 'a')) == 3
-        >>> g = lambda col: col + 2
-        >>> assert self.apply(g, lambda arg: arg.replace('col', 'a')) == 3
-        
+        >>> assert self.apply(function, relabels = dict(a = 'x')) == 3
+        >>> assert self.apply(function, relabels = lambda arg: arg.replace('a', 'x')) == 3
         """
-        args = getargs(function)
-        relabels = relabels or {}
-        args2keys = {arg : _relabel(arg, relabels) for arg in args}
-        parameters = {arg : self[key] for arg, key in args2keys.items() if key in self}
-        return self._precall(function)(**parameters)
-
+        return self._precall(function, relabels)(**self)
+                
 
     def do(self, functions=None, *keys, **relabels):
         """
@@ -254,14 +223,9 @@ class Dict(Dictattr):
         keys = slist(args_to_list(keys))
         relabels = relabels.get('relabels', relabels)
         for function in as_list(functions):
-            args = try_list(getargs)(function, 1) 
-            if keys & args:
-                raise ValueError('cannot apply args both in the function args and in the keys that need to be done as result is then order-of-operation sensitive %s'%(keys & args))
-            func = res._precall(function)
+            func = res._precall(function, relabels)
             for key in keys:
-                args2keys = {arg : _relabel(arg, relabels) for arg in args}
-                parameters = {arg : self[key] for arg, key in args2keys.items() if key in self}
-                res[key] = func(res[key], **parameters)
+                res[key] = func(res[key], **self)
         return res
     
     def relabel(self, **relabels):
@@ -275,7 +239,4 @@ class Dict(Dictattr):
         >>> assert d.relabel(relabels = dict(b='bb', c=lambda value: value.upper())) == Dict(a=1, bb=2, C=3)
         """
         relabels = relabels.get('relabels', relabels)
-        if not relabels: 
-            return self
-        return type(self)({_relabel(key, relabels) : value for key, value in self.items()})  
-
+        return relabel(self, relabels)

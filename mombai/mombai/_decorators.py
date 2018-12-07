@@ -5,8 +5,21 @@ from numpy import nan
 import collections
 
 version = sys.version_info
-ARGSPEC = 'argspec' if version.major<3 else 'fullargspec'
-    
+if version.major < 3:
+    ARGSPEC = 'argspec' 
+else:
+    ARGSPEC  = 'fullargspec'
+
+def argspec_update(argspec, **kwargs):
+    """
+    Allows us to copy an argspec, updating specific parameters specified in kwargs
+    """
+    tp = type(argspec)
+    params = {key : getattr(argspec, key) for key in dir(tp) if not key.startswith('_') and key not in ('count','index')}
+    params.update(kwargs)
+    return tp(**params)
+
+  
 def getargspec(function):
     if hasattr(function, ARGSPEC):
         return getattr(function, ARGSPEC)
@@ -25,7 +38,7 @@ def getargs(function, n = 0):
         return argspec.args[n:]
 
 def decorate(wrapped, function):
-    wrapped.argspec =  getargspec(function)
+    setattr(wrapped, ARGSPEC, getargspec(function))
     for attr in ['__name__', '__doc__']:
         if hasattr(function, attr):
             setattr(wrapped, attr, getattr(function, attr))
@@ -77,8 +90,8 @@ def try_value(value):
             except Exception:
                 return value
         return decorate(wrapped, function)
-    decorator.__doc__ = "tries to evaluate a function. if fails, returns %s"%(value)
     return decorator
+
 
 try_nan = try_value(nan)
 try_none = try_value(None)
@@ -99,3 +112,85 @@ def try_back(function):
         except Exception:
             return args[0] if args else kwargs[getargs(function)[0]]
     return decorate(wrapped, function)
+
+def relabel(key, relabels):
+    """
+    relabel does quite a few things
+    
+    Let us first look at how we rename strings:
+    >>> relabels = dict(b='BB', c = lambda value: value.upper())
+    >>> assert relabel('a', relabels) == 'a'
+    >>> assert relabel('b', relabels) == 'BB'
+    >>> assert relabel('c', relabels) == 'C'
+
+    Now we can use relabels to relabel a dict/list/tuple as well
+    >>> assert relabel(dict(a = 1, b=2, c=3), relabels) == {'a': 1, 'BB': 2, 'C': 3}
+    >>> assert relabel(['a', 'b', 'c'], relabels) == ['a', 'BB', 'C']
+    >>> assert relabel(('a', 'b', 'c'), relabels) == ('a', 'BB', 'C')
+    >>> assert relabel(None, relabels) is None
+    
+    Now, relabels can be a function rather than just a dict: 
+    >>> assert relabel(dict(a = 1, b=2, c=3), lambda label: label*2) == {'aa': 1, 'bb': 2, 'cc': 3}
+    
+    Finally, a special case. If relabels is a string, we treat it as a function that replaces 'label' with that string:
+    >>> assert relabel('label_in_text_is_renamed', 'market') == 'market_in_text_is_renamed'
+
+    Lastly, if key is a FUNCTION. Then we essentially use the relabels to change the function signature.
+    >>> func = lambda a, b, c : a+b+c
+    >>> assert getargs(func) == ['a', 'b', 'c']
+    >>> relabeled_func = relabel(func, relabels)
+    >>> assert getargspec(relabeled_func).args == ['a', 'BB', 'C']
+    >>> assert relabeled_func(1,2,3) == 6
+    >>> assert relabeled_func(a=1,BB=2,C=3)==6
+    """
+    if relabels is None:
+        return key
+    if isinstance(key, dict):
+        return type(key)({relabel(k, relabels) : v for k, v in key.items()})
+    elif isinstance(key, (list, tuple)):
+        return type(key)([relabel(k, relabels) for k in key])
+    elif key is None:
+        return key
+    elif callable(key):
+        return support_kwargs(relabels)(key)
+    if isinstance(relabels, str):
+        return key.replace('label', relabels)
+    if callable(relabels):
+        return relabels(key)
+    if key not in relabels:
+        return key
+    res = relabels[key]
+    if not isinstance(res, str) and callable(res):
+        return res(key)
+    else:
+        return res
+
+def support_kwargs(relabels=None):
+    """
+    convert a function to support kwargs. If a function has no argspec, will just feed the un-named parameters
+    if relabels are provided, the relabels are used to change the function signature!
+    >>> relabels = dict(b='BB', c = lambda value: value.upper())
+    >>> func = lambda a, b, c : a+b+c
+    >>> assert getargs(func) == ['a', 'b', 'c']
+    >>> relabeled_func = support_kwargs(relabels)(func)
+    >>> assert getargspec(relabeled_func).args == ['a', 'BB', 'C']
+    >>> assert relabeled_func(1,2,3) == 6
+    >>> assert relabeled_func(a=1,BB=2,C=3)==6
+    """
+    relabels = relabels  or {}
+    def decorator(function):
+        try:
+            argspec = getargspec(function)
+        except TypeError:
+            def wrapped(*args, **kwargs):
+                return function(*args)
+            return wrapped  
+        def wrapped(*args, **kwargs):
+            args2keys = {arg : relabel(arg, relabels) for arg in argspec.args}
+            parameters = {arg : kwargs[key] for arg, key in args2keys.items() if key in kwargs}
+            return function(*args, **parameters)
+        wrapped = decorate(wrapped, function)
+        setattr(wrapped, ARGSPEC, argspec_update(argspec, varkw = 'kwargs', args = relabel(argspec.args, relabels), defaults = relabel(argspec.defaults, relabels)))
+        return wrapped
+    return decorator
+
