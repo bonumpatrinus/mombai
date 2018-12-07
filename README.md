@@ -84,6 +84,6 @@ tree_of_grades = d['students/%id/classes/%subject/%grade'] # or
 tree_of_grades = d.to_tree('students/%id/classes/%subject/%grade')
 ```
 
-## RDDict (RDD of Dict)
+## RDDict (RDD of Dict, tbc)
 RDDict is an abstraction layer over pyspark that support the same interface as Dictable allowing us to move from local calculations using Dictable to Spark calculation using pyspark and RDDict without any code-change.
 
