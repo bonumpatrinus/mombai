@@ -3,6 +3,9 @@ from functools import partial
 import sys
 from numpy import nan
 import collections
+import logging
+import datetime
+import numpy as np
 
 version = sys.version_info
 if version.major < 3:
@@ -195,3 +198,14 @@ def support_kwargs(relabels=None):
         return wrapped
     return decorator
 
+def _txt(value):
+    return str(value) if isinstance(value, (int, str, float, bool, datetime.datetime)) else str(type(value))
+
+def profile(function):
+    def wrapped(*args, **kwargs):
+        t0 = datetime.datetime.now()
+        res = function(*args, **kwargs)
+        t1 = datetime.datetime.now()
+        print(' '.join([str(t1-t0), function.__name__] + [_txt(a) for a in args] + ['%s=%s'%(key, _txt(a)) for key, a in kwargs.items()]))
+        return res
+    return decorate(wrapped, function)

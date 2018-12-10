@@ -8,6 +8,7 @@ import pandas as pd
 from prettytable import PrettyTable
 import numpy_indexed as npi
 from functools import partial
+from tqdm import tqdm
 
 def cartesian(*arrays):
     """
@@ -165,9 +166,9 @@ class Dictable(Dict):
             elif len(args_)>0:
                 res = [function(*a) for a in  args_]
             elif len(kwargs_)>0:
-                res = [function(**k) for k in  kwargs_]
+                res = [function(**k) for k in kwargs_]
             else:
-                res = function()
+                res = []
             return res
         return try_back(decorate)(wrapped, function)
 
@@ -312,11 +313,11 @@ class Dictable(Dict):
     
     def __str__(self, max_rows=None):
         if not max_rows or len(self)<=abs(max_rows):
-            return self.do(_str_5x50, self.keys()).PrettyTable(border=False).__str__()
+            pt = self.do(_str_5x50, self.keys()).PrettyTable(border=False).__str__()
         else:
             top = self[:max_rows] if max_rows>0 else self[max_rows:]
             pt = top.do(_str_5x50, self.keys()).PrettyTable(border=False).__str__()
-            return '\n'.join([pt ,'...%i rows...'%len(self)])
+        return '\n'.join([pt ,'...%i rows...'%len(self)])
 
     def __repr__(self):
         return 'Dictable[%s x %s] '%self.shape + '\n%s'%self.__str__(5)
@@ -445,7 +446,7 @@ class Dictable(Dict):
         gb = self._GroupBy(*vals)
         res = type(self)(zip(keys, gb.unique[::-1]))
         z = Dictable(z = gb.split(self[values])).do(aggfunc, 'z')
-        gbx = res._GroupBy(*index)
+        gbx = res._GroupBy(*x.keys())
         rtn = type(self)(zip(x.keys(), gbx.unique[::-1]))
         yvals = gbx.split(res[columns])
         zvals = gbx.split(z.z)
