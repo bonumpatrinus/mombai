@@ -57,15 +57,13 @@ class Dictattr(dict):
     def __dict__(self):
         return dict(self)
 
-
 def _where(cond, key, value):
     """
-    We are getting into serious argpspec messing territory
     
     def where(self, cond, key = lambda a, b: a +b):
-        self[key] = where(cond, key, function)(self[key], **self)
+        self[key] = _where(cond, key, function)(self[key], **self)
     """
-    condition = relabel(cond if callable(cond) else partial(eq, y = cond))
+    condition = relabel(cond if callable(cond)  else partial(eq , y = cond))
     function = relabel(value if callable(value) else lambda : value)
     def wrapped(*args, **kwargs):
         if condition(*args, **{k:v for k,v in kwargs.items() if k!=key}):
@@ -81,7 +79,7 @@ def _mask(cond, key, value):
     def where(self, cond, key = lambda a, b: a +b):
         self[key] = where(cond, key, function)(self[key], **self)
     """
-    condition = relabel(cond if callable(cond) else partial(eq, y = cond))
+    condition = relabel(cond if callable(cond)  else partial(eq , y = cond))
     function = relabel(value if callable(value) else lambda : value)
     def wrapped(*args, **kwargs):
         if condition(*args, **{k:v for k,v in kwargs.items() if k!=key}):
@@ -269,6 +267,9 @@ class Dict(Dictattr):
         >>> assert x == Dict(a=0, b=1, c=2)
         >>> y = d.mask(lambda value: value is not None, a=0, b=1, c=2)
         >>> assert y == Dict(a=None, b=None, c=2)
+        
+        >>> d = Dict(a = '1', b = 2, c = 3.0)
+        >>> assert d.where(str, a = lambda a: float(a)) == Dict(a = 1.0, b = 2.0, c=3.0) ## what isn't float is converted to float
         """
         res = self.copy()
         for key, value in functions.items():
@@ -286,10 +287,13 @@ class Dict(Dictattr):
         
         >>> z = d.mask(None, a = lambda c: c*2) # if a is None, return c*2
         >>> assert z == Dict({'a': 'not none not none ', 'b': None, 'c': 'not none '})
+        
+        >>> d = Dict(a = '1', b = 2, c = 3.0)
+        >>> assert d.mask(str, a = lambda a: int(a)) == Dict(a = 1, b = 2, c=3.0)
         """
         res = self.copy()
         for key, value in functions.items():
-            res[key] = self._precall(_mask(cond, key, value))(res[key], **res)
+            res[key] = res._precall(_mask(cond, key, value))(res[key], **res)
         return res
 
     def relabel(self, **relabels):

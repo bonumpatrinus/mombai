@@ -10,6 +10,8 @@ import numpy_indexed as npi
 from functools import partial
 from tqdm import tqdm
 
+
+
 def cartesian(*arrays):
     """
     Creates a cartesian product of multiple arrays, we only use it for 2-d cartesian product in practice
@@ -29,6 +31,36 @@ vstack = concat
 
 _str_5x50 = partial(as_str, max_rows = 5, max_chars = 50)
 
+txt = """
+encoding - Unicode encoding scheme used to decode any encoded input
+field_names - list or tuple of field names
+fields - list or tuple of field names to include in displays
+start - index of first data row to include in output
+end - index of last data row to include in output PLUS ONE (list slice style)
+header - print a header showing field names (True or False)
+header_style - stylisation to apply to field names in header ("cap", "title", "upper", "lower" or None)
+border - print a border around the table (True or False)
+hrules - controls printing of horizontal rules after rows.  Allowed values: FRAME, HEADER, ALL, NONE
+vrules - controls printing of vertical rules between columns.  Allowed values: FRAME, ALL, NONE
+int_format - controls formatting of integer data
+float_format - controls formatting of floating point data
+padding_width - number of spaces on either side of column data (only used if left and right paddings are None)
+left_padding_width - number of spaces on left hand side of column data
+right_padding_width - number of spaces on right hand side of column data
+vertical_char - single character string used to draw vertical lines
+horizontal_char - single character string used to draw horizontal lines
+junction_char - single character string used to draw line junctions
+sortby - name of field to sort rows by
+sort_key - sorting key function, applied to data points before sorting
+valign - default valign for each row (None, "t", "m" or "b")
+"""
+
+def _max_width(txt, max_width = None):
+    if not max_width:
+        return txt
+    rows = txt.split('\n')
+    rng = range(0, max(map(len, rows)), max_width)
+    return '\n\n'.join(['\n'.join([row[n : n+max_width] for row in rows]) for n in rng])
 
 class Dictable(Dict):
     """
@@ -86,7 +118,7 @@ class Dictable(Dict):
         for i in range(len(self)):
             yield self[i]
 
-    def _mask(self, mask, exc=False):
+    def _mask(self, mask, exc=False, check_bool = True):
         """ 
         Applying a mask to each of the nd.array values in the dict
         >>> d = Dictable(a = [1,2,3], b=2, c=[3,4,6])
@@ -96,6 +128,19 @@ class Dictable(Dict):
         >>> assert len(complement) == 1        
         >>> resampled = d._mask([2,1,0,0,2])
         >>> assert len(resampled)==5 and np.allclose(resampled.a, [3,2,1,1,3]) 
+        
+        What is check_bool?
+        >>> self = Dictable(a = 1)
+        How do we understand self._mask([0]) ?
+            (a) is [0] the INDEX and we should return self
+            (b) it is a boolean and we should return nothing?
+            
+        what about Dictable(a = [1,2])._mask([0,1])?
+            (a) is it the index and we return self
+            (b) it is a bool and we return the last row?
+        
+        if check_bool = True (default) then we assume mask is boolean first. If check_bool = False, then we actually don't check for bool at all.
+        
         """
         if isinstance(mask, slice):
             if exc:
@@ -105,9 +150,24 @@ class Dictable(Dict):
         else:
             mask = as_ndarray(mask)
             if exc:
+                if len(mask) == 0: ## include everything, as mask be ufunc invert
+                    return self 
                 mask = ~mask
-        return type(self)({key : _getitem_as_array(self[key],mask) for key in self.keys()})
+        return type(self)({key : _getitem_as_array(self[key], mask, check_bool) for key in self.keys()})
 
+    def _subset(self, mask):
+        """
+        _mask and _subset are almost identical. The main problem is when self has 1 or 2 elemets.
+        self = Dictable(a = 1)
+        How do we understand self._mask([0]) ?
+            (a) is [0] the INDEX and we should return self
+            (b) it is a boolean and we should return nothing?
+            
+        what about Dictable(a = [1,2])._mask([0,1])?
+            (a) is it the index and we return self
+            (b) it is a bool and we return the last row?        
+        """
+        
     def get(self, key, *value):
         """
         The generic return is for a column of None's  of the same length
@@ -305,19 +365,21 @@ class Dictable(Dict):
         return Dictable({key : value for key, value in self.items() if key not in as_list(other)})
 
     def PrettyTable(self, *args, **kwargs):
+        if len(self) == 0:
+            return self.keys() ## pretty table does not print column names if there are no rows.
         x = PrettyTable(*args, **kwargs)
         x.field_names = self.keys()
         for row in self:
             x.add_row(row.values())
         return x
     
-    def __str__(self, max_rows=None):
+    def __str__(self, max_rows=None, max_width = 200):
         if not max_rows or len(self)<=abs(max_rows):
-            pt = self.do(_str_5x50, self.keys()).PrettyTable(border=False).__str__()
+            return _max_width(self.do(_str_5x50, self.keys()).PrettyTable(border=False).__str__(), max_width)
         else:
             top = self[:max_rows] if max_rows>0 else self[max_rows:]
-            pt = top.do(_str_5x50, self.keys()).PrettyTable(border=False).__str__()
-        return '\n'.join([pt ,'...%i rows...'%len(self)])
+            pt = _max_width(top.do(_str_5x50, self.keys()).PrettyTable(border=False).__str__(), max_width)
+            return '\n'.join([pt ,'...%i rows...'%len(self)])
 
     def __repr__(self):
         return 'Dictable[%s x %s] '%self.shape + '\n%s'%self.__str__(5)
@@ -344,7 +406,7 @@ class Dictable(Dict):
         >>> assert list(d.c) == list(range(11))
         """
         mask = self._GroupBy(*by).index.sorter
-        return self._mask(mask)
+        return self._mask(mask, check_bool = False)
         
     def listby(self, *by, **kwargs):
         """
@@ -459,7 +521,6 @@ class Dictable(Dict):
         index is a list/single key, on which the data is pivoting
         columns is a string, and is the name of the key describing the current column names
         values is also a string, and is the name of the data underneath the columns
-
         >>> d = Dictable(a = range(5))        
         >>> for b in range(5, 10):
         >>>     d[str(b)] = d.a * b
@@ -496,6 +557,12 @@ class Dictable(Dict):
         >>> assert list(map(list, res.lhs_idx)) == [[0], [1], [2], [3]] and  list(map(list, res.rhs_idx)) == [[3], [2], [1], [0]] 
         >>> res = lhs.pair(rhs, []) ## full cross join. 
         >>> assert len(res) == 1 and res.lhs_len[0] == len(lhs) and res.rhs_len[0] == len(rhs)        
+
+        >>> from mombai import Dictable
+        >>> self = Dictable(a=1)
+        >>> other = Dictable(b=2)
+        >>> pair = self.pair(other)
+        >>> assert len(pair) == 1 and len(pair.idx[0]) == len(self) + len(other)
         """
         on_left, on_right = self._on_left_and_on_right(other, on_left, on_right)
         lhs_len = len(self)        
@@ -527,20 +594,20 @@ class Dictable(Dict):
         res = pair.exc(rhs_len=0).exc(lhs_len=0)
         res = res(pairs = lambda lhs_idx, rhs_idx: cartesian(lhs_idx, rhs_idx))
         lhs_idx, rhs_idx = np.concatenate(res.pairs).T
-        dicts = [self._mask(lhs_idx), other._mask(rhs_idx)]
+        dicts = [self._mask(lhs_idx, check_bool = False), other._mask(rhs_idx, check_bool = False)]
         duplicate_columns = [left for left, right in zip(on_left, on_right) if left==right and left in self]
         merged = dict_merge(dicts, policy = merge, dict_type = dict, policies = {col : 'left' for col in duplicate_columns})
         return type(self)(dict_apply(merged, hstack, {col : None for col in duplicate_columns}))
 
     def _left_xor(self, pair, other):
         res = pair.inc(rhs_len=0).exc(lhs_len=0)
-        lhs_idx = concat(res.lhs_idx)
-        return self._mask(lhs_idx)
+        lhs_idx = sorted(concat(res.lhs_idx))
+        return self._mask(lhs_idx, check_bool = False)
 
     def _right_xor(self, pair, other):
         res = pair.exc(rhs_len=0).inc(lhs_len=0)
-        rhs_idx = concat(res.rhs_idx)
-        return other._mask(rhs_idx)
+        rhs_idx = sorted(concat(res.rhs_idx))
+        return other._mask(rhs_idx, check_bool = False)
 
     def merge(self, other, on_left=None, on_right=None, merge='a'):
         """
@@ -554,13 +621,10 @@ class Dictable(Dict):
         We see the pair function has matched Maxwell and Franklin even though the original data has difference lower/upper cases.
         
         Once the pairing has been done, we end up with two tables of equal length. Now we need to merge the two Dictables using dict_merge policy.
-
         The default behaviour is appending: if the same column name appears in both:
         >>> merged = self.merge(other, [lambda name: name[:3].lower(), lambda surname: surname.lower()])        
-
         >>> assert list(map(list, merged.name)) == [['Rosalyn', 'ROS'], ['James', 'JAMES']] 
         >>> assert list(map(list, merged.grades)) == [[100, 76], [95, 92]] 
-
         We can then decide what to do:
         >>> merged.do(np.mean, 'grades').do(lambda value: value[0], 'name', 'surname')
         >>> merged(avg = np.mean(merged.grades, axis=1))
@@ -587,11 +651,20 @@ class Dictable(Dict):
         >>> assert eq(students_who_didnt_eat, Dictable(name = 'Beth'))
         """
         other = type(self)(other)
+        on_left, on_right = self._on_left_and_on_right(other, on_left, on_right)
+        if not on_left and not on_right:
+            return self
         pair = self.pair(other, on_left, on_right)
         return self._left_xor(pair, other)
 
+    def __truediv__(self, other):
+        return self.xor(other)
+
     def right_xor(self, other, on_left=None, on_right=None):
         other = type(self)(other)
+        on_left, on_right = self._on_left_and_on_right(other, on_left, on_right)
+        if not on_left and not on_right:
+            return other
         pair = self.pair(other, on_left, on_right)
         return self._right_xor(pair, other)
 
@@ -620,5 +693,4 @@ class Dictable(Dict):
         items = [_pattern_to_item(pattern, row) for row in self]
         return items_to_tree(items = items, tree = tree)
 
-        
         

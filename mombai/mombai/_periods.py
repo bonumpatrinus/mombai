@@ -197,4 +197,3 @@ bday = BusinessDay(1)
 month = Month(1)
 year = Month(12)
 quarter = Month(3)
-

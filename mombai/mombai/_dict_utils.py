@@ -18,10 +18,22 @@ def pass_thru(x):
     return x
 
 def first(x):
-    return x[0]
+    """
+    >>> assert first(3) == 3
+    >>> assert first(None) == None
+    >>> assert first([1,2]) == 1
+    """
+    res = as_list(x)
+    return res[0] if len(res) else None
 
 def last(x):
-    return x[-1]
+    """
+    >>> assert last(3) == 3
+    >>> assert last(None) == None
+    >>> assert last([1,2]) == 2
+    """
+    res = as_list(x)
+    return res[-1] if len(res) else None
 
 
 def dict_apply(d, func=None, funcs=None):

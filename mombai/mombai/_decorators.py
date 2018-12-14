@@ -180,6 +180,12 @@ def support_kwargs(relabels=None):
     >>> assert getargspec(relabeled_func).args == ['a', 'BB', 'C']
     >>> assert relabeled_func(1,2,3) == 6
     >>> assert relabeled_func(a=1,BB=2,C=3)==6
+    
+    Now, let us examine where the function already supports kwargs, we add relabeling for the args only!
+    >>> function = lambda x, **kwargs : ''.join(['x'*x] + [key*value for key, value in kwargs.items()]) 
+    >>> assert support_kwargs()(function)(x=1, b=2, c=3) == 'xbbccc'
+    >>> assert support_kwargs(dict(x='a'))(function)(a=1, b=2, c=3) == 'xbbccc'
+    >>> assert support_kwargs(dict(x='a', y='b'))(function)(x=1, b=2, c=3) == 'xbbccc' # we never relabel kwargs. so 'b' is passed to the function rather than 'y'        
     """
     relabels = relabels  or {}
     def decorator(function):
@@ -188,10 +194,20 @@ def support_kwargs(relabels=None):
         except TypeError:
             def wrapped(*args, **kwargs):
                 return function(*args)
-            return wrapped  
+            return wrapped
         def wrapped(*args, **kwargs):
+            """
+            We need to supprt the case where varkw isnt None: the function expect parameters whose name we do not know.
+            They may still have relabels
+            >>> function = lambda x, **kwargs : ''.join(['x'*x] + [key*value for key, value in kwargs.items()]) 
+            >>> assert support_kwargs()(function)(x=1, b=2, c=3) == 'xbbccc'
+            >>> assert support_kwargs(dict(x='a'))(function)(a = 1, b=2, c=3) == 'xbbccc'
+            support_kwargs(dict(x='a', y='b'))(function)(x=1, b=2, c=3) == 'xbbccc' # we never relabel kwargs. 
+            """
             args2keys = {arg : relabel(arg, relabels) for arg in argspec.args}
-            parameters = {arg : kwargs[key] for arg, key in args2keys.items() if key in kwargs}
+            parameters = {arg : kwargs.pop(key) for arg, key in args2keys.items() if key in kwargs}
+            if argspec.varkw is not None:
+                parameters.update(kwargs)
             return function(*args, **parameters)
         wrapped = decorate(wrapped, function)
         setattr(wrapped, ARGSPEC, argspec_update(argspec, varkw = 'kwargs', args = relabel(argspec.args, relabels), defaults = relabel(argspec.defaults, relabels)))
@@ -204,8 +220,7 @@ def _txt(value):
 def profile(function):
     def wrapped(*args, **kwargs):
         t0 = datetime.datetime.now()
+        print(' '.join([str(t0), function.__name__] + [_txt(a) for a in args] + ['%s=%s'%(key, _txt(a)) for key, a in kwargs.items()]))
         res = function(*args, **kwargs)
-        t1 = datetime.datetime.now()
-        print(' '.join([str(t1-t0), function.__name__] + [_txt(a) for a in args] + ['%s=%s'%(key, _txt(a)) for key, a in kwargs.items()]))
         return res
     return decorate(wrapped, function)

@@ -82,6 +82,12 @@ def dt(*args):
     >>> assert dt(datetime.timedelta(7)) == today() + datetime.timedelta(7)
     >>> assert dt(dt(20000101), month) == dt(2000,2,1)
     >>> assert dt(dt(20000101), 3*year, -month) == dt(2002,12,1)
+    
+    Known issues: The parser.parse function in dateutil is slightly too lenient, e.g.:
+    >>> from dateutil import parser
+    >>> assert parser.parse('feb 2012') == datetime.datetime(2012, 2, 10, 0, 0)
+    However, nobody is perfect.
+    
     """
     if len(args) == 0:
         return dt(0)
@@ -115,3 +121,35 @@ def dt(*args):
 
 dt.now = datetime.datetime.now 
 dt.today = today   
+
+_futs = list('FGHJKMNQUVXZ')
+_months = ['january', 'february', 'march','april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+_mmms = [month[:3] for month in _months]
+_mms = [('0%i'%i)[-2:] for i in range(1,13)]
+_mmm2mm = dict(zip(_mmms, _mms))
+_month2mm = dict(zip(_months, _mms))
+_fut2mm = dict(zip(_futs, _mms))
+
+def as_mm(month):
+    """
+    as_mm converts a month into month representation in two-digits month formart.
+    >>> assert as_mm(2) == '02'
+    >>> assert as_mm('feb') == '02'
+    >>> assert as_mm('february') == '02'
+    >>> assert as_mm('G') == '02'  ## using Futures code FGHJKMNQUVXZ per month
+    >>> assert as_mm(dt(2000,2,2)) == '02'  ## using date.month
+    >>> assert as_mm('2nd feb 2002') == '02'  ## using date.month
+    """
+    if isinstance(month, datetime.datetime):
+        return month.strftime('%m')
+    elif isinstance(month, int) and month<13 and month>0:
+        return ('0%i'%month)[-2:] 
+    elif isinstance(month, str):
+        if len(month) == 3:
+            return _mmm2mm[month.lower()]
+        elif len(month) == 1:
+            return _fut2mm[month.upper()]
+        elif month in _month2mm:
+            return _month2mm[month.lower()]
+    return as_mm(dt(month))
+

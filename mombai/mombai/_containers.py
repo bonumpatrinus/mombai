@@ -54,9 +54,9 @@ def _eq_attrs(x, y, attrs):
             return False
     return True
 
-def _getitem_as_array(iterable, item):
+def _getitem_as_array(iterable, item, check_bool = True):
     if is_array(item):
-        if len(item) == len(iterable) and min([isinstance(i, bool) or i in [0,1] for i in item]):
+        if check_bool and len(item) == len(iterable) and min([isinstance(i, bool) or i in [0,1] for i in item]):
             return [i for i, tf in zip(iterable, item) if tf]
         else:
             return [iterable[i] for i in item]
@@ -231,8 +231,11 @@ def args_to_dict(args):
     return res
 
 def concat(*arrays):
+    """joins arrays together efficiently, using np.concatenate if arrays are ndarray, otherwise, using built in sum"""
     arrays = args_to_list(arrays)
-    if min([isinstance(arr, np.ndarray) for arr in arrays]):
+    if len(arrays) == 0:
+        return []
+    elif min([isinstance(arr, np.ndarray) for arr in arrays]):
         return np.concatenate(arrays)
     else:
         return sum([as_list(arr) for arr in arrays], [])

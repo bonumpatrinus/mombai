@@ -4,4 +4,4 @@ from mombai._dict_utils import dict_zip, dict_concat, dict_append, dict_merge, d
 from mombai._dict import Dict
 from mombai._dictable import Dictable, cartesian
 from mombai._periods import day, week, month, bday, Month, BusinessDay, is_weekend, is_eom
-from mombai._dates import dt, today
+from mombai._dates import dt, today, as_mm
