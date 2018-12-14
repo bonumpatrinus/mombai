@@ -294,3 +294,24 @@ def test_Dict_where():
     assert y == Dictable(a=[None,0], b=[None,1], c=2)
 
 
+def test_Dictable__call__with_kwargs_supporting_function():
+    d = Dictable(a= [1,2, 3], b= [4,5,6], x= [1,2,0])
+    function = lambda x, **kwargs : ''.join(['x'*x] + [key*value for key, value in sorted(kwargs.items())]) 
+    assert d[function] ==  ['xabbbb', 'xxaabbbbb', 'aaabbbbbb']
+
+def test_Dictable_sort_no_bool():
+    d = Dictable(a = [2,1])
+    assert d.sort('a') == Dictable(a = [1,2])
+
+def test_Dictable_merge_few_elements():
+    d = Dictable(a=[1,2]) * Dictable(b=1)
+    assert d == Dictable(a=[1,2], b=1)
+    d = Dictable(a=1) * Dictable(b=1)
+    assert d == Dictable(a=1, b=1)
+
+def test_Dictable_xor_few_elements():
+    d = Dictable(a=[1,2]) / Dictable(b=1)
+    assert d == Dictable(a=[1,2])
+    d = Dictable(a=[1,2]) / Dictable(a=1)
+    assert d == Dictable(a=2)
+

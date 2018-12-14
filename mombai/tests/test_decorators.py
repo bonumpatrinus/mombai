@@ -118,3 +118,10 @@ def test_support_kwargs():
     assert relabeled_func(a=1,BB=2,C=3)==6
     assert relabeled_func(a=1,BB=2,C=3, some_other_stuff =3)==6
 
+
+def test_support_kwargs_with_varkw():
+    function = lambda x, **kwargs : ''.join(['x'*x] + [key*value for key, value in kwargs.items()]) 
+    support_kwargs()(function)(x=1, b=2, c=3) == 'xbbccc'
+    support_kwargs(dict(x='a'))(function)(a=1, b=2, c=3) == 'xbbccc'
+    support_kwargs(dict(x='a', y='b'))(function)(x=1, b=2, c=3) == 'xbbccc' # we never relabel kwargs. so 'b' is passed to the function rather than 'y'        
+
