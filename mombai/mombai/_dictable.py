@@ -31,30 +31,6 @@ vstack = concat
 
 _str_5x50 = partial(as_str, max_rows = 5, max_chars = 50)
 
-txt = """
-encoding - Unicode encoding scheme used to decode any encoded input
-field_names - list or tuple of field names
-fields - list or tuple of field names to include in displays
-start - index of first data row to include in output
-end - index of last data row to include in output PLUS ONE (list slice style)
-header - print a header showing field names (True or False)
-header_style - stylisation to apply to field names in header ("cap", "title", "upper", "lower" or None)
-border - print a border around the table (True or False)
-hrules - controls printing of horizontal rules after rows.  Allowed values: FRAME, HEADER, ALL, NONE
-vrules - controls printing of vertical rules between columns.  Allowed values: FRAME, ALL, NONE
-int_format - controls formatting of integer data
-float_format - controls formatting of floating point data
-padding_width - number of spaces on either side of column data (only used if left and right paddings are None)
-left_padding_width - number of spaces on left hand side of column data
-right_padding_width - number of spaces on right hand side of column data
-vertical_char - single character string used to draw vertical lines
-horizontal_char - single character string used to draw horizontal lines
-junction_char - single character string used to draw line junctions
-sortby - name of field to sort rows by
-sort_key - sorting key function, applied to data points before sorting
-valign - default valign for each row (None, "t", "m" or "b")
-"""
-
 def _max_width(txt, max_width = None):
     if not max_width:
         return txt
