@@ -158,6 +158,10 @@ def test_Dictable_sort():
     d = d.sort(lambda b: b*3 % 11) ## sorting again by c but using a function
     assert list(d.c) == list(range(11))
 
+def test_Dictable_sort_multitype():
+    d = Dictable(a = [None, np.nan, np.array([2,3]), np.array([1,2]), 0.4])
+    assert d.sort('a') == Dictable(a = [None, 0.4, np.nan, np.array([1,2]), np.array([2,3])])
+
 def test_Dictable_listby():
     d = Dictable(a = list('abracadabra'), b=range(11), c = list('harrypotter'))
     per_a = d.listby('a')

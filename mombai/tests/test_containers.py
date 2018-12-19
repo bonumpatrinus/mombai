@@ -1,4 +1,4 @@
-from mombai._containers import ordered_set, slist, args_to_list, args_to_dict, args_zip, is_array, as_list, as_ndarray, as_array, eq
+from mombai._containers import ordered_set, slist, args_to_list, args_to_dict, args_zip, is_array, as_list, as_ndarray, as_array, eq, Cmp, cmp
 import numpy as np
 import pandas as pd
 import pytest
@@ -83,3 +83,10 @@ def test_eq():
     assert not eq(pd.DataFrame([1,np.nan], columns = ['a']), pd.DataFrame([1,np.nan], columns = ['b']))
     assert not eq(pd.DataFrame([1,np.nan], columns = ['a'], index=['a','b']), pd.DataFrame([1,np.nan], columns = ['a'], index=[0,1]))
 
+def test_Cmp():
+    assert Cmp(None)<Cmp(1)
+    assert Cmp(1.0) == Cmp(1)
+    assert sorted([1,2,3,None, 'a'], key = Cmp) == [None, 1, 2, 3, 'a']
+    assert sorted([1,2,3,None, 'a', 2.0, 1.0], key = Cmp) ==  [None, 1, 1.0, 2, 2.0, 3, 'a']
+    assert sorted([1,2.0, 1, 1.0, np.nan, 0, 0.0, 1], key = Cmp) == sorted([1,2.0, 1, 1.0, np.nan, 0, 0.0, 1])
+    assert sorted([1,2.0, None, 1, 'a', 1.0, np.nan, 0, 0.0, 1], key = Cmp) ==  [None, 0, 0.0, 1, 1, 1.0, 1, 2.0, np.nan, 'a']
