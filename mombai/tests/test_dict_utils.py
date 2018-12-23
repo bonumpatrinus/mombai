@@ -1,5 +1,5 @@
 from mombai._dict_utils import dict_zip, dict_concat, dict_merge, dict_append, dict_invert, dict_update_left, dict_update_right, dict_apply, data_and_columns_to_dict
-from mombai._containers import eq
+from mombai._compare import eq
 import pandas as pd
 import numpy as np
 

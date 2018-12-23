@@ -1,5 +1,5 @@
 from mombai._dictable import Dictable, Dict, as_ndarray, vstack, hstack, cartesian
-from mombai._containers import eq
+from mombai._compare import eq
 import pytest
 import numpy as np
 import pandas as pd
@@ -224,15 +224,15 @@ def test_Dictable_pair():
     lhs = Dictable(a = [1,2,3,4], b=[1,2,1,2], c=[1,1,2,2])
     rhs = Dictable(a = [4,3,2,1], b=[1,2,1,2], c=[1,1,2,2])
     res = lhs.pair(rhs, ['b','c']) ## join on identical columns!
-    assert list(map(list, res.idx)) == [[0, 0 + 4], [1, 1 + 4], [2, 2 + 4], [3, 3+4]] 
-    res = lhs.pair(rhs, 'a') ## join reversed columns
+    assert list(map(list, res.sort('idx').idx)) == [[0, 0 + 4], [1, 1 + 4], [2, 2 + 4], [3, 3+4]] 
+    res = lhs.pair(rhs, 'a').sort('idx') ## join reversed columns
     assert list(map(list, res.lhs_idx)) == [[0], [1], [2], [3]] and  list(map(list, res.rhs_idx)) == [[3], [2], [1], [0]] 
     
 def test_Dictable_join():
     lhs = Dictable(a = [1,2,3,4], b=[1,2,1,2], c=[1,1,2,2], d='d')
     rhs = Dictable(a = [4,3,2,1], b=[1,2,1,2], c=[1,1,2,2], e='e')
     pair = lhs.pair(rhs, ['b','c']) ## join on identical columns!
-    res = lhs._join(pair, rhs, on_left=['b','c'], on_right=['b','c'])
+    res = lhs._join(pair, rhs, on_left=['b','c'], on_right=['b','c']).sort('a')
     assert list(map(list, res.a)) == [[1, 4], [2, 3], [3, 2], [4, 1]]
     assert set(res.d) == {'d'} and set(res.e) == {'e'}
 

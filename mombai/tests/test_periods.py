@@ -1,33 +1,20 @@
 from mombai._dates import today, dt
-from mombai._periods import day, month, week, bday, BusinessDay, Month, is_eom, is_weekend
+from mombai._periods import day, month, week, bday, Month, BusinessDay, is_eom, is_weekend
 
 import datetime
 from dateutil import parser
 D = datetime.datetime
 
 def test_month_eom():
-    m = Month(m=1, eom = True)
+    m = Month(1, eom=True)
     date = D(2001,2,28)
     assert is_eom(date)
     assert m + date == D(2001,3,31)    
     assert date - 12 * m == D(2000, 2, 29)    
 
-def test_month_not_eom():
-    m = Month(m=1, eom = False)
-    date = D(2001,2,28)
-    assert is_eom(date)
-    assert m + date == D(2001,3,28)    
-    assert date - 12 * m == D(2000, 2, 28)    
-
-def test_month_roll():
-    m = Month(m=1, eom = False, roll = True)
-    date = D(2001,1,31)
-    assert is_eom(date)
-    assert date + m == D(2001,3,3)    
-    assert date - 12 * m == D(2000, 1, 31)    
 
 def test_month_no_roll():
-    m = Month(m=1, eom = False, roll = False)
+    m = Month(m=1, eom = False)
     date = D(2001,1,30)
     assert date + m == D(2001,2,28)    
     assert date - 12 * m == D(2000, 1, 30)    
@@ -40,7 +27,7 @@ def test_month_operations():
 
 
 def test_month_default():
-    assert month == Month(1, roll = False, eom = False)
+    assert month == Month(1, eom = False)
 
 
 def test_bday():

@@ -1,5 +1,7 @@
-from mombai._containers import ordered_set, slist, args_to_list, args_to_dict, args_zip, is_array, as_list, as_ndarray, as_array, eq, Cmp, cmp
+from mombai._containers import ordered_set, slist, args_to_list, args_to_dict, args_zip, is_array, as_list, as_ndarray, as_array
+from mombai._compare import eq, Cmp, cmp
 import numpy as np
+from numpy import nan
 import pandas as pd
 import pytest
 
@@ -60,33 +62,3 @@ def test_args_to_dict():
     with pytest.raises(ValueError):
         args_to_dict(['a','b',lambda c: c]) == dict(a='a',b='b',c='d', e='f')
 
-
-def test_eq():
-    assert eq(np.nan, np.nan)
-    assert eq(np.array([np.array([1,2]),2]), np.array([np.array([1,2]),2]))
-    assert eq(np.array([np.nan,2]),np.array([np.nan,2]))    
-    assert eq(dict(a = np.array([np.array([1,2]),2])) ,  dict(a = np.array([np.array([1,2]),2])))
-    assert eq(dict(a = np.array([np.array([1,np.nan]),np.nan])) ,  dict(a = np.array([np.array([1,np.nan]),np.nan])))
-    assert eq(np.array([np.array([1,2]),dict(a = np.array([np.array([1,2]),2]))]), np.array([np.array([1,2]),dict(a = np.array([np.array([1,2]),2]))]))
-    
-    class FunnyDict(dict):
-        pass
-    assert not eq(dict(a = 1), FunnyDict(a=1))    
-    assert 1 == 1.0
-    assert eq(1, 1.0)
-    assert eq(np.inf, np.inf)
-    assert not eq(np.inf, -np.inf)
-    assert not eq(np.inf, np.nan)
-    assert eq(pd.DataFrame([1,2]), pd.DataFrame([1,2]))
-    assert eq(pd.DataFrame([np.nan,2]), pd.DataFrame([np.nan,2]))
-    assert eq(pd.DataFrame([1,np.nan], columns = ['a']), pd.DataFrame([1,np.nan], columns = ['a']))
-    assert not eq(pd.DataFrame([1,np.nan], columns = ['a']), pd.DataFrame([1,np.nan], columns = ['b']))
-    assert not eq(pd.DataFrame([1,np.nan], columns = ['a'], index=['a','b']), pd.DataFrame([1,np.nan], columns = ['a'], index=[0,1]))
-
-def test_Cmp():
-    assert Cmp(None)<Cmp(1)
-    assert Cmp(1.0) == Cmp(1)
-    assert sorted([1,2,3,None, 'a'], key = Cmp) == [None, 1, 2, 3, 'a']
-    assert sorted([1,2,3,None, 'a', 2.0, 1.0], key = Cmp) ==  [None, 1, 1.0, 2, 2.0, 3, 'a']
-    assert sorted([1,2.0, 1, 1.0, np.nan, 0, 0.0, 1], key = Cmp) == sorted([1,2.0, 1, 1.0, np.nan, 0, 0.0, 1])
-    assert sorted([1,2.0, None, 1, 'a', 1.0, np.nan, 0, 0.0, 1], key = Cmp) ==  [None, 0, 0.0, 1, 1, 1.0, 1, 2.0, np.nan, 'a']

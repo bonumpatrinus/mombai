@@ -82,9 +82,8 @@ def test_cache_class_method():
         def __call__(self, x):
             return x
     t = test()
-    assert t.__call__.cache == {}
     assert t(4) == 4
-    assert t.__call__.cache == {((4,), ()): 4}
+    assert t.cache == {('__call__', (4,), ()): 4}
 
 def test_relabel():
     relabels = dict(b='BB', c = lambda value: value.upper())
