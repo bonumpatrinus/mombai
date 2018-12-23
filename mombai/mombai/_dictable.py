@@ -1,16 +1,17 @@
 from _collections_abc import dict_keys
-from mombai._decorators import decorate, try_back, support_kwargs, relabel
+from mombai._decorators import decorate, try_back, support_kwargs, relabel, cache
+from mombai._compare import Cmp, eq, Index
 from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist , _getitem_as_array, concat, as_str
 from mombai._dict_utils import dict_apply, dict_zip, dict_concat, dict_merge, data_and_columns_to_dict, items_to_tree, _pattern_to_item, _is_pattern, _as_pattern
 from mombai._dict import Dict
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
-import numpy_indexed as npi
 from functools import partial
-from tqdm import tqdm
+#from tqdm import tqdm
 
-
+def _value(_):
+    return _.value
 
 def cartesian(*arrays):
     """
@@ -30,6 +31,7 @@ def hstack(value):
 vstack = concat
 
 _str_5x50 = partial(as_str, max_rows = 5, max_chars = 50)
+
 
 def _max_width(txt, max_width = None):
     if not max_width:
@@ -173,6 +175,10 @@ class Dictable(Dict):
         >>> d['a'] = 1 ## this should work even though len(self)==0
         >>> with pytest.raises(ValueError):
         >>>     d['b'] = [1,2]
+        
+        >>> d = Dictable(fn = ['//root/fn1.csv', '//root/fn2.csv'])
+        >>> d['path','file'] = d[lambda fn: [_ for _ in fn.split('/') if _]]
+
         """
         value = as_list(value)
         n = n or len(self)
@@ -182,7 +188,12 @@ class Dictable(Dict):
             value = value * n
         else:
             raise ValueError('cannot set item of mismatched length %s to array of size %s'%(len(value), n))
-        super(Dictable, self).__setitem__(key, value)
+        if isinstance(key, tuple):
+            for k, v in zip(key, zip(*value)):
+                super(Dictable, self).__setitem__(k, v)
+        else:
+            super(Dictable, self).__setitem__(key, value)
+
 
     def _vectorize(self, function, relabels=None):
         """
@@ -360,11 +371,8 @@ class Dictable(Dict):
     def __repr__(self):
         return 'Dictable[%s x %s] '%self.shape + '\n%s'%self.__str__(5)
     
-    def _GroupBy(self, *keys):
-        """
-        This uses the index provided by numpy_index function
-        """
-        return npi.group_by(tuple(self[col] for col in args_to_list(keys)[::-1]))
+    def _index(self, *keys):
+        return Index([self[key] for key in args_to_list(keys)])
 
     def sort(self, *by):
         """
@@ -375,15 +383,15 @@ class Dictable(Dict):
         >>> res = d.sort('c')
         >>> assert list(res.c) == list(range(11))
         
-        >>> d = d.sort('a','c')
-        >>> assert ''.join(d.a) == 'aaaaabbcdrr' and list(d.c) == [0,4,8,9,10] + [2,3] + [1] + [7] + [5,6]
+        >>> res = d.sort('a','c')
+        >>> print(res)
+        >>> assert ''.join(res.a) == 'aaaaabbcdrr' and list(res.c) == [0,4,8,9,10] + [2,3] + [1] + [7] + [5,6]
         
         >>> d = d.sort(lambda b: b*3 % 11) ## sorting again by c but using a function
         >>> assert list(d.c) == list(range(11))
         """
-        mask = self._GroupBy(*by).index.sorter
-        return self._mask(mask, check_bool = False)
-        
+        return self._index(*by).sort(self)
+
     def listby(self, *by, **kwargs):
         """
         >>> d = Dictable(a = [_ for _ in 'abracadabra'], b=range(11), c = [_ for _ in 'harrypotter'])
@@ -400,17 +408,17 @@ class Dictable(Dict):
         We can list by values which we create and assign to new keys on the fly:
         >>> res = d.listby(dict(bmod2 = lambda b: b % 2), 'a')
         >>> assert res.keys() == ['bmod2','a','b','c']
-        >>> assert res[0].do(list, 'b','c') == dict(bmod2=0, a = 'a', b = [0,10], c = ['h','r']) ## top row
+        >>> assert res[0].do(list, 'b','c') == Dict(bmod2=0, a = 'a', b = [0,10], c = ['h','r']) ## top row
         """
         keys2values = args_to_dict(by)
         keys2values.update(kwargs)
         keys = slist(keys2values.keys())
         values = list(keys2values.values())
         non_keys = self.keys() - keys
-        gb = self._GroupBy(*values)
-        res = type(self)(zip(keys, gb.unique[::-1]))
+        idx = self._index(*values)
+        res = type(self)(zip(keys, idx.unique))
         for key in non_keys:
-            res[key] = gb.split(self[key])
+            res[key] = idx.group(self[key])
         return res
     
     def groupby(self, *by, grp = 'grp', **kwargs):
@@ -418,7 +426,8 @@ class Dictable(Dict):
         We group together all records that share the same keys determined by "by". 
         The records form a mini Dictable which is available in the grp key.
         
-        Example:        
+        Example:  
+        >>> from mombai import *
         >>> d = Dictable(a = [_ for _ in 'abracadabra'], b=range(11), c = [_ for _ in 'harrypotter'])
         
         Group by a single key:
@@ -434,15 +443,16 @@ class Dictable(Dict):
         >>> res = d.groupby(dict(bmod2 = lambda b: b % 2), 'a', grp = 'table')
         >>> assert res.keys() == ['bmod2','a','table']
         >>> assert list(res[0].table.b) == [0,10] ## top row
+        self=d; by = 'a'; kwargs = {}
         """
         keys2values = args_to_dict(by)
         keys2values.update(kwargs)
         keys = slist(keys2values.keys())
         values = list(keys2values.values())
         non_keys = self.keys() - keys
-        gb = self._GroupBy(*values)
-        res = type(self)(zip(keys, gb.unique[::-1]))
-        res[grp] = as_ndarray([type(self)(zip(non_keys, row)) for row in zip(*[gb.split(self[key]) for key in non_keys])])
+        idx = self._index(*values)
+        res = type(self)(zip(keys, idx.unique))
+        res[grp] = as_ndarray([type(self)(zip(non_keys, row)) for row in zip(*[idx.group(self[key]) for key in non_keys])])
         return res
     
     def unlist(self):
@@ -481,13 +491,13 @@ class Dictable(Dict):
         assert len(y) == 1, 'Cannot have multiple values columns'
         keys = list(x.keys()) + list(y.keys())
         vals = list(x.values()) + list(y.values())        
-        gb = self._GroupBy(*vals)
-        res = type(self)(zip(keys, gb.unique[::-1]))
-        z = Dictable(z = gb.split(self[values])).do(aggfunc, 'z')
-        gbx = res._GroupBy(*x.keys())
-        rtn = type(self)(zip(x.keys(), gbx.unique[::-1]))
-        yvals = gbx.split(res[columns])
-        zvals = gbx.split(z.z)
+        gb = self._index(*vals)
+        res = type(self)(zip(keys, gb.unique))
+        z = Dictable(z = gb.group(self[values])).do(aggfunc, 'z')
+        gbx = res._index(*x.keys())
+        rtn = type(self)(zip(x.keys(), gbx.unique))
+        yvals = gbx.group(res[columns])
+        zvals = gbx.group(z.z)
         dicts = {str(key): value for key, value in dict_concat([dict(zip(yval, zval)) for yval, zval in zip(yvals, zvals)]).items()}
         rtn.update(dicts)
         return rtn
@@ -525,8 +535,8 @@ class Dictable(Dict):
         """
         This function the heavy lifting of creating pairing of the left/right indices that match on keys. 
         returns a Dictable with lhs_idx and rhs_idx containing the paired indices
-        >>> lhs = Dictable(a = [1,2,3,4], b=[1,2,1,2], c=[1,1,2,2])
-        >>> rhs = Dictable(a = [4,3,2,1], b=[1,2,1,2], c=[1,1,2,2])
+        >>> self  = lhs = Dictable(a = [1,2,3,4], b=[1,2,1,2], c=[1,1,2,2])
+        >>> other = rhs = Dictable(a = [4,3,2,1], b=[1,2,1,2], c=[1,1,2,2])
         >>> res = lhs.pair(rhs, ['b','c']) ## join on identical columns!
         >>> assert list(map(list, res.idx)) == [[0, 0 + 4], [1, 1 + 4], [2, 2 + 4], [3, 3+4]] 
         >>> res = lhs.pair(rhs, 'a') ## join reversed columns
@@ -539,16 +549,18 @@ class Dictable(Dict):
         >>> other = Dictable(b=2)
         >>> pair = self.pair(other)
         >>> assert len(pair) == 1 and len(pair.idx[0]) == len(self) + len(other)
+
+        self = Dictable(a = [1,1,2,2,3,3])
+        other = Dictable(a = [1,1,1,2,3,4])
+        on_left = on_right = None
+        self = Dictable(a=1); other=Dictable(a=[1,2])
+        self.pair(other)
         """
         on_left, on_right = self._on_left_and_on_right(other, on_left, on_right)
-        lhs_len = len(self)        
-        rhs_len = len(other)
-        if not on_left and not on_right:
-            joint_keys = np.zeros(lhs_len+rhs_len)
-        else:
-            joint_keys = np.array([np.concatenate((self[left_key], other[right_key])) for left_key, right_key in list(zip(on_left, on_right))[::-1]]).T
-        gb = npi.group_by(joint_keys)
-        res = Dictable(idx = gb.split(np.arange(lhs_len+rhs_len)))
+        lhs_len = len(self)
+        joint_keys = [np.concatenate((self[left_key], other[right_key])) for left_key, right_key in list(zip(on_left, on_right))]
+        idx = Index(joint_keys)
+        res = Dictable(idx = idx.grouped)
         res = res(lhs_idx = lambda idx: idx[idx<lhs_len])(rhs_idx = lambda idx: idx[idx>=lhs_len]-lhs_len)
         res = res(lhs_len = lambda lhs_idx: len(lhs_idx))(rhs_len = lambda rhs_idx: len(rhs_idx))
         return res
@@ -609,10 +621,17 @@ class Dictable(Dict):
             1) pairing of the two tables (using self.pair)
             2) subsets selection/cartesian product from the two tables
             3) dict_merge of the two subsets
+
+        self = Dictable(a = range(3))
+        other = Dictable(a = range(3,6))
+        c = self.merge(other, on_left = [])
         """
         other = type(self)(other)
         on_left, on_right = self._on_left_and_on_right(other, on_left, on_right)
-        pair = self.pair(other, on_left, on_right)
+        if len(on_left) == 0:
+            pair = Dictable(idx = [np.arange(len(self) + len(other))], lhs_idx = [np.arange(len(self))], rhs_idx = [np.arange(len(other))], lhs_len = len(self), rhs_len = len(other))
+        else:
+            pair = self.pair(other, on_left, on_right)
         return self._join(pair, other, on_left, on_right, merge)
     
     def __mul__(self, other):
@@ -669,4 +688,3 @@ class Dictable(Dict):
         items = [_pattern_to_item(pattern, row) for row in self]
         return items_to_tree(items = items, tree = tree)
 
-        

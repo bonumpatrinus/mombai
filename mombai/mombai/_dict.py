@@ -1,5 +1,6 @@
 from _collections_abc import dict_keys
-from mombai._containers import slist, as_list, args_zip, args_to_list, eq
+from mombai._compare import eq
+from mombai._containers import slist, as_list, args_zip, args_to_list
 from mombai._decorators import getargs, try_list, decorate, support_kwargs, relabel
 from mombai._dict_utils import pass_thru, first, last
 from functools import partial

@@ -1,4 +1,18 @@
+from mombai._dictable import Dictable
 import datetime
+from dateutil import relativedelta
+from dateutil.relativedelta import *
+from dateutil.rrule import rrule, WEEKLY, SA, SU, MO, TU, WE,TH, FR
+
+T0 = datetime.datetime(1970,1,1)
+T1 = datetime.datetime(2300,1,1)
+
+
+_history = Dictable(date = list(rrule(WEEKLY, wkst=SU, byweekday=(MO,TU,WE,TH, FR), dtstart = T0, until = T1)))
+def as_holiday(dates):
+    hols = _history.xor(dict(date = dates))    
+    return hols
+      
 day = datetime.timedelta(1)
 week = 7 * day
 
@@ -50,27 +64,23 @@ class Month(object):
     what is 2001-01-31 + 1 month?
     
     For US Treasuries, there is an eom convention: if your current date is EOM, then adding a month must take you to EOM too.
-    This is the "eom" flag.
+    This is the "eom" flag. Otherwise, we revert to dateutil.relativedelta
     
-    The usual pattern otherwise is that we don't roll over the end-of-month 30/1 + 1M  = 28/2 while 30/1 + 2M = 30/3.
-    Below we implement also a roll = True, allowing 30th 
-    >>> assert datetime.datetime(2001,1,30) + Month(1, roll = False) == datetime.datetime(2001,2,28)
-    >>> assert datetime.datetime(2001,1,30) + Month(1, roll = True)  == datetime.datetime(2001,3,2) ## both are 29 days past the 1st of their month    
-    >>> assert datetime.datetime(2001,1,31) + Month(1, eom = True, roll = True) == datetime.datetime(2001,2,28)
+    >>> assert datetime.datetime(2001,1,30) + Month(1) == datetime.datetime(2001,2,28)
+    >>> assert datetime.datetime(2001,1,31) + Month(1, eom = True) == datetime.datetime(2001,2,28)
     """
-    def __init__(self, m=1, roll = False, eom = False):
+    def __init__(self, m=1, eom = False):
         self.m = m
-        self.roll = roll
         self.eom = eom
     def copy(self):
-        return Month(m = self.m, roll = self.roll, eom = self.eom)
+        return Month(m = self.m, eom = self.eom)
     
     def __add__(self, date):
         eom = _ymd2dt(date.year, date.month+1+self.m, 0)
         if self.eom and is_eom(date):
             return eom
         res = _ymd2dt(date.year, date.month + self.m, date.day)
-        if self.roll or res <= eom:
+        if res <= eom:
             return res
         else:
             return eom
@@ -91,10 +101,14 @@ class Month(object):
         return other + (-self)
     
     def __repr__(self):
-        return "Months(%i)"%self.m +(' rolling' if self.roll else '') + (' using eom' if self.eom else '')
+        return "Months(%i)"%self.m + (' using eom' if self.eom else '')
 
     def __eq__(self, other):
-        return type(other) == type(self) and other.m == self.m and other.roll == self.roll and other.eom == self.eom
+        return type(other) == type(self) and other.m == self.m and other.eom == self.eom
+
+
+
+
 
 class BusinessDay(object):
     """
@@ -114,9 +128,10 @@ class BusinessDay(object):
     
     Implementing a full Holiday Calendar is possible but we would then think about optimization
     """
-    def __init__(self, b=0, convention = 'm'):
+    def __init__(self, b=0, convention = 'm', hols = None):
         self.b = b
         self.convention = self._as_convention(convention)
+        self.hols = hols
 
     def _as_convention(self, convention):
         if convention is None:

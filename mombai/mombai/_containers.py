@@ -14,7 +14,8 @@ if version.major<3:
 else:
     def is_array(value):
         return isinstance(value, (list, tuple, range, np.ndarray, dict_keys))
-    
+
+
 def as_list(value):
     if value is None:
         return []
@@ -47,88 +48,18 @@ def as_str(value, max_rows = None, max_chars = None):
     else:
         return '\n'.join([row[:max_chars] for row in value.__str__().split('\n')[:max_rows]])
 
-def _eq_attrs(x, y, attrs):
-    for attr in attrs:
-        if hasattr(x, attr) and not eq(getattr(x, attr), getattr(y, attr)):
-            print(attr)
-            return False
-    return True
 
-def _getitem_as_array(iterable, item, check_bool = True):
-    if is_array(item):
-        if check_bool and len(item) == len(iterable) and min([isinstance(i, bool) or i in [0,1] for i in item]):
-            return [i for i, tf in zip(iterable, item) if tf]
-        else:
-            return [iterable[i] for i in item]
-    else:
-        return iterable[item]
-
-
-def eq(x, y):
-    """
-    A better nan-handling equality comparison. Here is the problem:
-    
-    >>> import numpy as np
-    >>> assert not np.nan == np.nan  ## What?
-    
-    The nan issue extends to np.arrays...
-    >>> assert list(np.array([np.nan,2]) == np.array([np.nan,2])) == [False, True]
-    
-    but not to lists...
-    >>> assert [np.nan] == [np.nan]
-    
-    But wait, if the lists are derived from np.arrays, then no equality...
-    >>> assert not list(np.array([np.nan])) == list(np.array([np.nan]))
-    
-    The other issue is inheritance:
-    >>> class FunnyDict(dict):
-    >>>    def __getitem__(self, key):
-    >>>        return 5
-    >>> assert dict(a = 1) == FunnyDict(a=1) ## equality seems to ignore any type mismatch
-    >>> assert not dict(a = 1)['a'] == FunnyDict(a = 1)['a'] 
-    
-    >>> import pandas as pd
-    >>> import pytest
-    >>> from mombai import eq
-    
-    >>> assert eq(np.nan, np.nan) ## That's better
-    >>> assert eq(np.array([np.nan,2]),np.array([np.nan,2]))    
-    >>> assert eq(np.array([np.array([1,2]),2]), np.array([np.array([1,2]),2]))
-    >>> assert eq(np.array([np.nan,2]),np.array([np.nan,2]))    
-    >>> assert eq(dict(a = np.array([np.array([1,2]),2])) ,  dict(a = np.array([np.array([1,2]),2])))
-    >>> assert eq(dict(a = np.array([np.array([1,np.nan]),np.nan])) ,  dict(a = np.array([np.array([1,np.nan]),np.nan])))
-    >>> assert eq(np.array([np.array([1,2]),dict(a = np.array([np.array([1,2]),2]))]), np.array([np.array([1,2]),dict(a = np.array([np.array([1,2]),2]))]))
-    
-    >>> assert not eq(dict(a = 1), FunnyDict(a=1))    
-    >>> assert eq(1, 1.0)
-    >>> assert eq(x = pd.DataFrame([1,2]), y = pd.DataFrame([1,2]))
-    >>> assert eq(pd.DataFrame([np.nan,2]), pd.DataFrame([np.nan,2]))
-    >>> assert eq(pd.DataFrame([1,np.nan], columns = ['a']), pd.DataFrame([1,np.nan], columns = ['a']))
-    >>> assert not eq(pd.DataFrame([1,np.nan], columns = ['a']), pd.DataFrame([1,np.nan], columns = ['b']))
-    """
-    if x is y:
-        return True
-    elif isinstance(x, (np.ndarray, tuple, list)):
-        return type(x)==type(y) and len(x)==len(y) and _eq_attrs(x,y, ['__shape__']) and np.all(_veq(x,y))
-    elif isinstance(x, (pd.Series, pd.DataFrame)):
-        return type(x)==type(y) and _eq_attrs(x,y, attrs = ['__shape__', 'index', 'columns']) and np.all(_veq(x,y))
-    elif isinstance(x, dict):
-        if type(x) == type(y) and len(x)==len(y):
-            xkey, xval = zip(*sorted(x.items()))
-            ykey, yval = zip(*sorted(y.items()))
-            return eq(xkey, ykey) and eq(np.array(xval, dtype='object'), np.array(yval, dtype='object'))
-        else:
-            return False
-    elif isinstance(x, float) and np.isnan(x):
-        return isinstance(y, float) and np.isnan(y)  
-    else:
-        try:
-            res = x == y
-            return np.all(res.__array__()) if hasattr(res, '__array__') else res
-        except Exception:
-            return False # if you really have no == supported, the two items are not the same
-
-_veq = np.vectorize(eq)
+def replace(value, what, to = ''):
+    what = as_list(what)
+    if isinstance(value, str):
+        for arg in what:
+            while arg in value:
+                value = value.replace(arg, to)
+    elif is_array(value):
+        return type(value)([replace(v, what, to) for v in value])
+    elif isinstance(value, dict):
+        return type(value)({k: replace(v, what, to) for k, v in value.items()})
+    return value    
 
 class ordered_set(OrderedSet):
     """
@@ -229,6 +160,17 @@ def args_to_dict(args):
             else:
                 raise ValueError('cannot use a non-string %s in the list, it must be assigned a string name by making it into a dict'%arg)
     return res
+
+
+def _getitem_as_array(iterable, item, check_bool = True):
+    if is_array(item):
+        if check_bool and len(item) == len(iterable) and min([isinstance(i, bool) or i in [0,1] for i in item]):
+            return [i for i, tf in zip(iterable, item) if tf]
+        else:
+            return [iterable[i] for i in item]
+    else:
+        return iterable[item]
+
 
 def concat(*arrays):
     """joins arrays together efficiently, using np.concatenate if arrays are ndarray, otherwise, using built in sum"""

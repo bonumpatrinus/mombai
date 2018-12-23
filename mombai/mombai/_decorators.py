@@ -68,14 +68,45 @@ def _cache_key(function):
     return _key
 
 
-def cache(function):
+def cache_method(function):
     """
-    A decorator for a function, where a function call arguments are hashable, will cache on that key
+    >>> import datetime
+    >>> import time
+    >>> class Clock(object):
+        @cache_method
+        def time(self):
+            return datetime.datetime.now()
+    >>> c = Clock()
+    >>> t = c.time()
+    >>> time.sleep(1)
+    >>> assert c.time() == t
+
+    >>> d = Clock()
+    >>> assert d.time()>t    
     """
-    _key = _cache_key(function)
+    name = function.__name__
+    def _key(*args, **kwargs):
+        return (name, args[1:], tuple(kwargs.items()))
+    def wrapped(*args, **kwargs):
+        key = _key(*args, **kwargs)
+        me = args[0]
+        if _hashable(key):
+            me.cache = getattr(me, 'cache', {})
+            if key not in me.cache:
+                me.cache[key] = function(*args, **kwargs)
+            return me.cache[key]
+        else:
+            return function(*args, **kwargs)
+    result = decorate(wrapped, function)
+    return result
+
+def cache_func(function):
+    def _key(*args, **kwargs):
+        return (args, tuple(kwargs.items()))
     def wrapped(*args, **kwargs):
         key = _key(*args, **kwargs)
         if _hashable(key):
+            wrapped.cache =  getattr(wrapped, 'cache', {})
             if key not in wrapped.cache:
                 wrapped.cache[key] = function(*args, **kwargs)
             return wrapped.cache[key]
@@ -84,6 +115,19 @@ def cache(function):
     result = decorate(wrapped, function)
     result.cache = {}
     return result
+    
+
+def cache(function):
+    """
+    A decorator for a function, where a function call arguments are hashable, will cache on that key
+
+    """
+    args = getargs(function)
+    if args and args[0] in ('self', 'cls'):
+        return cache_method(function)
+    else:
+        return cache_func(function)
+    
 
 def try_value(value):
     def decorator(function):
@@ -224,3 +268,46 @@ def profile(function):
         res = function(*args, **kwargs)
         return res
     return decorate(wrapped, function)
+
+def dict_loop(function):
+    argspec = getargspec(function)
+    top = argspec.args[0] if argspec.args else ''
+    def wrapped(*args, **kwargs):
+        if len(args): 
+            if isinstance(args[0], dict):
+                def _k(value, key):
+                    return value[key] if isinstance(value, dict) and value.keys() == args[0].keys() else value
+                return type(args[0])({key : wrapped(*(_k(a, key) for a in args), **{k:_k(v, key) for k,v in kwargs.items()}) for key in args[0].keys()})
+            else:
+                return function(*args, **kwargs)
+        elif len(kwargs) and top in kwargs and isinstance(kwargs[top], dict):
+            def _k(value, key):
+                return value[key] if isinstance(value, dict) and value.keys() == kwargs[top].keys() else value
+            return type(kwargs[top])({key : wrapped(*(_k(a, key) for a in args), **{k:_k(v, key) for k,v in kwargs.items()}) for key in kwargs[top].keys()})
+        else:
+            return function(*args, **kwargs)
+    return decorate(wrapped, function)
+
+
+def array_loop(tp = list):
+    def looper(function):
+        argspec = getargspec(function)
+        top = argspec.args[0] if argspec.args else ''
+        def wrapped(*args, **kwargs):
+            if len(args): 
+                if isinstance(args[0], tp):
+                    def _k(value, key):
+                        return value[key] if isinstance(value, tp) and len(value) == len(args[0]) else value
+                    return type(args[0])([wrapped(*(_k(a, key) for a in args), **{k:_k(v, key) for k,v in kwargs.items()}) for key in range(len(args[0]))])
+                else:
+                    return function(*args, **kwargs)
+            elif len(kwargs) and top in kwargs and isinstance(kwargs[top], tp):
+                def _k(value, key):
+                    return value[key] if isinstance(value, tp) and len(value) == len(kwargs[top]) else value
+                return type(kwargs[top])([wrapped(*(_k(a, key) for a in args), **{k:_k(v, key) for k,v in kwargs.items()}) for key in range(len(kwargs[top]))])
+            else:
+                return function(*args, **kwargs)
+        return decorate(wrapped, function)
+    return looper
+
+list_loop = array_loop(list)
