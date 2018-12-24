@@ -1,4 +1,4 @@
-from mombai._compare import eq, Cmp, cmp, Index
+from mombai._compare import eq, Cmp, cmp, Sort
 from numpy import nan, array, int64
 import numpy as np
 import pandas as pd
@@ -51,19 +51,20 @@ def test_cmp():
     assert cmp(np.nan,2.) == 1     
 
 
-def test_Index_single_mixed_values():
+def test_Sort_single_mixed_values():
     values = [3,6,2,1.0, 3.0, 4,None, nan, ]
-    i = Index([values])
-    assert eq(i._sorted[0], np.array([None, 1.0, 2, 3, 3., 4, 6, nan]))
+    self = i = Sort([values])
+    i.keys
+    assert eq(i.sorted[0], np.array([None, 1.0, 2, 3, 3., 4, 6, nan]))
     assert eq(i.argsort, array([6, 3, 2, 0, 4, 5, 1, 7]))
     assert eq(i.unique, [array([None, 1.0, 2, 3, 4, 6, nan])])
     assert i.group(values) ==  [[None], [1.0], [2], [3, 3.0], [4], [6], [nan]]
 
 
-def test_Index_single_mixed_values_with_strings():
+def test_Sort_single_mixed_values_with_strings():
     values = [3,6,2,1.0, 'b', 3.0, 4,None, nan, 'a']
-    i = Index([values])
-    assert eq(i._sorted[0], array([None, 1.0, 2, 3, 3.0, 4, 6, nan, 'a', 'b'], dtype=object))
+    i = Sort([values])
+    assert eq(i.sorted[0], array([None, 1.0, 2, 3, 3.0, 4, 6, nan, 'a', 'b'], dtype=object))
     assert eq(i.argsort, array([7, 3, 2, 0, 5, 6, 1, 8, 9, 4], dtype=int64))
     assert eq(i.unique, [array([None, 1.0, 2, 3, 4, 6, nan, 'a', 'b'])])
     assert i.group(values) ==  [[None], [1.0], [2], [3, 3.0], [4], [6], [nan], ['a'], ['b']]

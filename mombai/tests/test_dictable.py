@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 
 def test_Dictable__init__():
-    d = Dictable(a = [1,2,3], b=2, c=[3,4,6])
-    assert len(d) == 3
-    assert isinstance(d, dict)
-    assert np.allclose(d.a, [1,2,3])
-    assert np.allclose(d.b, [2,2,2])
-    assert isinstance(d.b, list)
+    self = Dictable(a = [1,2,3], b=2, c=[3,4,6])
+    assert len(self) == 3
+    assert isinstance(self, dict)
+    assert np.allclose(self.a, [1,2,3])
+    assert np.allclose(self.b, [2,2,2])
+    assert isinstance(self.b, np.ndarray)
 
 def test_Dictable__init__DataFrame():
     df = pd.DataFrame(dict(a = [1,2,3], b=list('abc')))
@@ -38,20 +38,20 @@ def test_Dictable__iter__():
     assert iters == [Dict({'a': 1, 'b': 2, 'c': 3}), Dict({'a': 2, 'b': 2, 'c': 4}), Dict({'a': 3, 'b': 2, 'c': 6})]
 
 def test_Dictable__mask():
-    d = Dictable(a = [1,2,3], b=2, c=[3,4,6])
-    subset = d._mask([True, True, False])
+    self = Dictable(a = [1,2,3], b=2, c=[3,4,6])
+    subset = self._mask([True, True, False])
     assert len(subset) == 2
-    complement = d._mask([True, True, False], True)
+    complement = self._mask(mask = [True, True, False], exc = True)
     assert len(complement) == 1        
-    resampled = d._mask([2,1,0,0,2])
+    resampled = self._mask([2,1,0,0,2])
     assert len(resampled)==5 and np.allclose(resampled.a, [3,2,1,1,3]) 
 
 
 def test_Dictable__setitem__():
     d = Dictable(a = [1,2,3,4,5])
-    assert isinstance(d.a, list)
+    assert isinstance(d.a, np.ndarray)
     d['b'] = 1
-    assert isinstance(d.b, list) and len(d.b) == 5
+    assert isinstance(d.b, np.ndarray) and len(d.b) == 5
     with pytest.raises(ValueError):
         d['c'] = [1,2]
 
@@ -80,7 +80,7 @@ def test_Dictable_exc():
     res = d.exc(lambda a,b: b<a, a = range(5,10))
     assert list(res.a) == [0,1,2] and list(res.b) == [2,1,2]
 
-def test_Dictableinc():
+def test_Dictable_inc():
     d = Dictable(a = range(10))
     assert len(d.inc(a = [1,2,3])) == 3
     assert list(d.inc(a = [1,2,3]).a) == [1,2,3]
@@ -110,12 +110,12 @@ def test_Dictable__getitem__():
     res = d[lambda a,b: a % b]
     assert list(res) == [0,1]*5
 
-def test_Dictable__call__():
+def test_Dictable__call__with_labels():
     d = Dictable(a=[1,2,3], b=[4,5,6])
     d = d('a','b',label2 = lambda label: label**2, c=3)
     assert eq(d, Dictable(a=[1,2,3], b=[4,5,6], a2=[1,4,9], b2=[16,25,36], c=[3,3,3]))
     d = d({'x':'a'}, a3 = lambda x: x**3)
-    assert d.a3 == [1,8,27]
+    assert eq(d.a3, np.array([1,8,27]))
 
 
 def test_Dictable_concat():
@@ -284,8 +284,10 @@ def test_Dictable_right_xor():
     students_who_didnt_eat = lunch.right_xor(students)
     assert eq(students_who_didnt_eat, Dictable(name = 'Beth'))
 
+
 def test_Dictable_mask():
     d = Dictable(a = [None, None], b=[None, 2], c= [1, '2'])
+    d.c
     assert d.mask(None, a=0, b=1, c=2) == Dictable(a = [0,0], b=[1,2], c = [1, '2'])
     y = d.mask(lambda value: value is None, a=0, b=lambda c: c*2, c=2)
     assert y == Dictable(a = 0, b=2, c = [1, '2'])
