@@ -15,40 +15,6 @@ else:
     def is_array(value):
         return isinstance(value, (list, tuple, range, np.ndarray, dict_keys))
 
-
-def as_list(value):
-    if value is None:
-        return []
-    elif is_array(value):
-        return list(value)
-    else:
-        return [value]
-
-def as_array(value):
-    if value is None:
-        return []
-    elif is_array(value):
-        return value
-    else:
-        return [value]
-
-def as_ndarray(value):
-    try:
-        return np.array(as_list(value))
-    except ValueError:
-        return np.array(as_list(value), dtype='object')
-
-def as_type(value):
-    return value if isinstance(value, type) else type(value)
-
-
-def as_str(value, max_rows = None, max_chars = None):
-    if max_rows is None and max_chars is None:
-        return value.__str__()
-    else:
-        return '\n'.join([row[:max_chars] for row in value.__str__().split('\n')[:max_rows]])
-
-
 def replace(value, what, to = ''):
     what = as_list(what)
     if isinstance(value, str):
@@ -103,6 +69,66 @@ class slist(list):
         return slist(ordered_set(self) - other)
     def __mod__(self, other):
         return slist(ordered_set(self) % other)
+
+class nplist(list):
+    """
+    a list that supports the numpy interface. Does NOT accept bool arrays. This needs to be handled elsewhere
+    """
+    def __getitem__(self, item):
+        me = super(nplist, self).__getitem__
+        if (hasattr(item, '__next__ ') or hasattr(item, '__iter__')) and not isinstance(item, str):
+            return nplist([me(i) for i in item])
+        else:
+            return me(item)
+    def __mul__(self, other):
+        return type(self) * super(nplist,self).__mul__(other)
+    def __repr__(self):
+        return 'nplist'+ super(nplist,self).__repr__()
+    def __str__(self):
+        return 'nplist'+ super(nplist,self).__str__()
+
+def as_list(value, tp=list):
+    if value is None:
+        return []
+    elif is_array(value):
+        return tp(value)
+    else:
+        return tp([value])
+
+def as_array(value):
+    if value is None:
+        return []
+    elif is_array(value):
+        return value
+    else:
+        return [value]
+
+def as_ndarray(value):
+    if isinstance(value, np.ndarray):
+        return value
+    value = as_list(value, nplist)
+    if len(set([type(v) for v in value]))==1:
+        try:
+            return np.array(value)
+        except ValueError:
+            pass
+    try:
+        return np.array(value, dtype='object')
+    except ValueError:
+        return value
+    raise Exception('could not construct %s as an array' % value)
+
+def as_type(value):
+    return value if isinstance(value, type) else type(value)
+
+
+def as_str(value, max_rows = None, max_chars = None):
+    if max_rows is None and max_chars is None:
+        return value.__str__()
+    else:
+        return '\n'.join([row[:max_chars] for row in value.__str__().split('\n')[:max_rows]])
+
+
 
 
 def _args_len(*values):

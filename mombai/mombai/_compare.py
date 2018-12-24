@@ -88,6 +88,22 @@ def _cmparr(*arr):
                 break
     return c
 
+
+def _type(x):
+    return str(float if isinstance(x, (int,float, np.int64, np.int32, np.int, np.int16)) else type(x))
+
+def _len(x):
+    return len(x) if hasattr(x, '__len__') else 0
+
+def _type_length(x):
+    return (_type(x), _len(x))
+
+
+vtype = np.vectorize(_type)
+vlen  = np.vectorize(_len)
+vtl = np.vectorize(_type_length)
+
+
 def cmp(x, y):
     """
     return -1 if x<y else 1 if x>y else 0
@@ -115,8 +131,8 @@ def cmp(x, y):
     """
     if x is y:
         return 0
-    tx = str(float if isinstance(x, (int,float, np.int32, np.int, np.int16)) else type(x))
-    ty = str(float if isinstance(y, (int,float, np.int32, np.int, np.int16)) else type(y))
+    tx = str(float if isinstance(x, (int,float, np.int64, np.int32, np.int, np.int16)) else type(x))
+    ty = str(float if isinstance(y, (int,float, np.int64, np.int32, np.int, np.int16)) else type(y))
     if tx<ty:
         return -1
     elif tx>ty:
@@ -168,35 +184,62 @@ class Cmp(object):
     def __repr__(self):
         return 'Compare ' + self.value.__repr__()
 
-class Index(object):
-    """
-    A lightweight index class to sort/groupby/split numpy arrays
-    >>> values = [[1,3,4,3,2,1], [1,2,1,2,1,2]]
-    >>> self = Index(values)
-    >>> self.argsort
-    >>> self.values
-    >>> self.keys[0][0]
-    >>> self._sorted
-    >>> assert eq(self._sorted , (np.array([1, 1, 2, 3, 3, 4]), np.array([1, 2, 1, 2, 2, 1])))
-    >>> assert eq(self.unique , [np.array([1, 1, 2, 3, 4]), np.array([1, 2, 1, 2, 1])])
-    >>> assert list(map(list, self.grouped)) == [[0], [5], [4], [1, 3], [2]]
-    """
-    def __init__(self, values):
-        self.values = tuple([as_ndarray(v) for v in values])
 
+def argsort(seq):
+    return sorted(range(len(seq)), key=seq.__getitem__)
+
+
+def reverse(values):
+    return values[::-1]
+
+
+def panda_sorter(values):
+    cols= list(range(len(values)))
+    return pd.DataFrame(data = np.array(values).T, columns = cols).sort_values(by = cols).index.values
+
+vCmp = np.vectorize(Cmp)
+
+
+def as_cmp(values):
+    if isinstance(values, np.ndarray) and len(values.shape)==2:
+        values = list(values.T)
+    res = []
+    for value in values:
+        value = as_ndarray(value)
+        if len(value.shape)==2:
+            res.extend(as_cmp(value))
+        elif value.dtype == np.dtype('O'):
+            res.append(vCmp(value))
+        else:
+            res.append(value)
+    return res
+
+
+class Sort(object):
+    def __init__(self, values, sorter=np.lexsort, transform=None, key = as_cmp):
+        self.values = tuple(as_ndarray(v) for v in values)
+        if transform: 
+            self.values = tuple(transform(v) for v in self.values)
+        self.sorter = sorter
+        self.transform = transform
+        self.key = key
+    
     @property
     @cache
-    def keys(self):    
-        return [[Cmp(v) for v in value] for value in self.values[::-1]]
+    def keys(self):
+        if self.key is None:
+            return self.values[::-1]
+        else:
+            return self.key(self.values)[::-1] 
 
     @property
     @cache
     def argsort(self):
-        return np.lexsort(self.keys)
+        return self.sorter(self.keys)
     
     @property
     @cache
-    def _sorted(self):
+    def sorted(self):
         """
         sorting myself based on argsort, returns a transposed matrix!
         """
@@ -230,7 +273,7 @@ class Index(object):
         we know the sorted data is indexed by argsort so we then return the coordinates in the original data
         """
         veq = np.vectorize(eq)
-        changes = ~np.min(np.array([veq(col[1:], col[:-1]) for col in self._sorted]), axis=0)
+        changes = ~np.min(np.array([veq(col[1:], col[:-1]) for col in self.sorted]), axis=0)
         return np.arange(1, len(self))[changes]
 
     @property
@@ -254,11 +297,20 @@ class Index(object):
     @property
     def unique(self):
         mask = np.concatenate([[0], self._edges])
-        return [col[mask] for col in self._sorted]
+        return [col[mask] for col in self.sorted]
     
     def __str__(self):
-        return 'Index of ' + self.values.__str__()
+        return '%s of %s' % (type(self).__name__, self.values.__str__())
     
     def __repr__(self):
-        return 'Index of ' + self.values.__repr__()
+        return '%s of %s' % (type(self).__name__, self.values.__repr__())
+
+
+#values = [['10', '2', 2, 1, None, np.array([10,2]), np.array([3,4,5]), np.array([3,4])]]
+#t = Sort(values, argsort, transform = None, key  = _as_keys)
+#t.argsort
+
+        
+
+
 

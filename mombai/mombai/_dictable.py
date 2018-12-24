@@ -1,7 +1,7 @@
 from _collections_abc import dict_keys
 from mombai._decorators import decorate, try_back, support_kwargs, relabel, cache
-from mombai._compare import Cmp, eq, Index
-from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist , _getitem_as_array, concat, as_str
+from mombai._compare import Cmp, eq, Sort
+from mombai._containers import as_ndarray, as_list, args_zip, _args_len, args_to_list, args_to_dict, slist , _getitem_as_array, concat, as_str, nplist
 from mombai._dict_utils import dict_apply, dict_zip, dict_concat, dict_merge, data_and_columns_to_dict, items_to_tree, _pattern_to_item, _is_pattern, _as_pattern
 from mombai._dict import Dict
 import numpy as np
@@ -60,7 +60,7 @@ class Dictable(Dict):
         kwargs.update(data_and_columns_to_dict(data,columns))
         super(Dictable, self).__init__(kwargs)
         for key, value in self.items():
-            super(Dictable, self).__setitem__(key, as_list(value))
+            super(Dictable, self).__setitem__(key, as_ndarray(value))
         n = len(self)
         for key, value in self.items():
             self.__setitem__(key, value, n)
@@ -95,6 +95,15 @@ class Dictable(Dict):
         """
         for i in range(len(self)):
             yield self[i]
+            
+    def _bool2mask(self, mask, exc = False, check_bool=True):
+        if check_bool and (hasattr(mask, '__next__ ') or hasattr(mask, '__iter__')) and not isinstance(mask, str) and hasattr(mask, '__len__') and len(mask) == len(self) and min([isinstance(i, bool) or i in [0,1] for i in mask]):
+            mask = np.array(mask)
+            if exc:
+                mask = ~mask
+            return np.arange(len(self))[mask]
+        else:
+            return as_ndarray(mask)
 
     def _mask(self, mask, exc=False, check_bool = True):
         """ 
@@ -126,12 +135,10 @@ class Dictable(Dict):
                 index[mask] = False
                 mask = index
         else:
-            mask = as_ndarray(mask)
-            if exc:
-                if len(mask) == 0: ## include everything, as mask be ufunc invert
-                    return self 
-                mask = ~mask
-        return type(self)({key : _getitem_as_array(self[key], mask, check_bool) for key in self.keys()})
+            mask = self._bool2mask(mask, check_bool, exc)
+            if exc and len(mask) == 0: ## include everything, as mask be ufunc invert
+                return self 
+        return type(self)({key : value[mask] for key, value in self.items()})
 
     def _subset(self, mask):
         """
@@ -180,12 +187,12 @@ class Dictable(Dict):
         >>> d['path','file'] = d[lambda fn: [_ for _ in fn.split('/') if _]]
 
         """
-        value = as_list(value)
+        value = as_ndarray(value)
         n = n or len(self)
         if len(value)==n or len(self.keys()) == 0:
             pass
         elif len(value)== 1:
-            value = value * n
+            value = value * n if isinstance(value, list) else np.concatenate([value] * n)
         else:
             raise ValueError('cannot set item of mismatched length %s to array of size %s'%(len(value), n))
         if isinstance(key, tuple):
@@ -193,7 +200,6 @@ class Dictable(Dict):
                 super(Dictable, self).__setitem__(k, v)
         else:
             super(Dictable, self).__setitem__(key, value)
-
 
     def _vectorize(self, function, relabels=None):
         """
@@ -371,8 +377,8 @@ class Dictable(Dict):
     def __repr__(self):
         return 'Dictable[%s x %s] '%self.shape + '\n%s'%self.__str__(5)
     
-    def _index(self, *keys):
-        return Index([self[key] for key in args_to_list(keys)])
+    def _Sort(self, *keys):
+        return Sort([self[key] for key in args_to_list(keys)])
 
     def sort(self, *by):
         """
@@ -390,7 +396,7 @@ class Dictable(Dict):
         >>> d = d.sort(lambda b: b*3 % 11) ## sorting again by c but using a function
         >>> assert list(d.c) == list(range(11))
         """
-        return self._index(*by).sort(self)
+        return self._Sort(*by).sort(self)
 
     def listby(self, *by, **kwargs):
         """
@@ -415,7 +421,7 @@ class Dictable(Dict):
         keys = slist(keys2values.keys())
         values = list(keys2values.values())
         non_keys = self.keys() - keys
-        idx = self._index(*values)
+        idx = self._Sort(*values)
         res = type(self)(zip(keys, idx.unique))
         for key in non_keys:
             res[key] = idx.group(self[key])
@@ -450,7 +456,7 @@ class Dictable(Dict):
         keys = slist(keys2values.keys())
         values = list(keys2values.values())
         non_keys = self.keys() - keys
-        idx = self._index(*values)
+        idx = self._Sort(*values)
         res = type(self)(zip(keys, idx.unique))
         res[grp] = as_ndarray([type(self)(zip(non_keys, row)) for row in zip(*[idx.group(self[key]) for key in non_keys])])
         return res
@@ -491,10 +497,10 @@ class Dictable(Dict):
         assert len(y) == 1, 'Cannot have multiple values columns'
         keys = list(x.keys()) + list(y.keys())
         vals = list(x.values()) + list(y.values())        
-        gb = self._index(*vals)
+        gb = self._Sort(*vals)
         res = type(self)(zip(keys, gb.unique))
         z = Dictable(z = gb.group(self[values])).do(aggfunc, 'z')
-        gbx = res._index(*x.keys())
+        gbx = res._Sort(*x.keys())
         rtn = type(self)(zip(x.keys(), gbx.unique))
         yvals = gbx.group(res[columns])
         zvals = gbx.group(z.z)
@@ -559,7 +565,7 @@ class Dictable(Dict):
         on_left, on_right = self._on_left_and_on_right(other, on_left, on_right)
         lhs_len = len(self)
         joint_keys = [np.concatenate((self[left_key], other[right_key])) for left_key, right_key in list(zip(on_left, on_right))]
-        idx = Index(joint_keys)
+        idx = Sort(joint_keys)
         res = Dictable(idx = idx.grouped)
         res = res(lhs_idx = lambda idx: idx[idx<lhs_len])(rhs_idx = lambda idx: idx[idx>=lhs_len]-lhs_len)
         res = res(lhs_len = lambda lhs_idx: len(lhs_idx))(rhs_len = lambda rhs_idx: len(rhs_idx))
