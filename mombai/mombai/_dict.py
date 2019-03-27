@@ -18,6 +18,9 @@ class Dictattr(dict):
     >>> assert a['a','b'] == [1,2]
     >>> assert a[['a','b']] == Dictattr(a = 1, b=2)
     >>> assert not a == dict(a=1,b=2)
+    
+    >>> a = Dictattr(a=1)
+    >>> hasattr(a, 'tes')
     """
     def __sub__(self, other):
         return type(self)({key: value for key, value in self.items() if  key in self.keys() - other})
@@ -30,11 +33,18 @@ class Dictattr(dict):
     def __dir__(self):
         return list(self.keys()) + super(Dictattr, self).__dir__()
     def __getattr__(self, attr):
-        return self[attr]
+        try:
+            return self[attr]
+        except KeyError as e:
+            raise AttributeError(str(e))
+        return super(Dictattr, self).__getattr__(attr) if attr.startswith('_') else self[attr]
     def __setattr__(self, attr, value):
         self[attr] = value
     def __delattr__(self, attr):
-        del self[attr]
+        try:
+            del self[attr]
+        except KeyError as e:
+            raise AttributeError(str(e))
     def __getitem__(self, value):
         if isinstance(value, tuple):
             return [self[v] for v in value]
