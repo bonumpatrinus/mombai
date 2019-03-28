@@ -158,6 +158,7 @@ class Dictable(Dict):
         The generic return is for a column of None's  of the same length
         >>> d = Dictable(a = [1,2,3])
         >>> assert list(d.get('b')) == [None, None, None]
+        We do not use value = None signature as the default None depends on the size of self
         """
         if key in self:
             return self[key]
@@ -203,10 +204,12 @@ class Dictable(Dict):
 
     def _vectorize(self, function, relabels=None):
         """
-        This function try to run np.vectorize but resorts to line-by-line running if failed or if answer is not in right shape
+        This function try to line-by-line running 
         >>> d = Dictable(a = [1,2,3,4,5])
         >>> d.b = d[lambda a: range(a)]
         >>> vsum = d._vectorize(sum)
+        >>> import pytest
+        >>> import numpy as np
         >>> with pytest.raises(TypeError):
         >>>     sum(d.b)
         >>> assert np.allclose(vsum(d.b), [0,1,3,6,10]) ## triangular functions        
@@ -268,6 +271,7 @@ class Dictable(Dict):
     
     def __getitem__(self, item):
         """
+        >>> from mombai import *
         >>> d = Dictable(a = range(10), b=[1,2]*5)
         
         accessing using a mask or a range:
@@ -301,7 +305,7 @@ class Dictable(Dict):
         
         access as tree:
         >>> d = Dictable(name = ['abe', 'beth'], gender = ['m','f'])
-        >>> d['%name/%gender'] == dict(abe = 'm', beth = 'f')
+        >>> assert d['%name/%gender'] == dict(abe = 'm', beth = 'f')
         """
         if isinstance(item, (np.ndarray,slice, range)):
             return self._mask(item)
@@ -328,12 +332,11 @@ class Dictable(Dict):
     
         If you have two Dictables that you want to merge horizontally, use e.g. lhs.merge(rhs), lhs.left_join(rhs) etc
 
-        >>> self = Dictable(a=[1,2,3,], b=[[5]], d='hi')
-        >>> other = Dictable(a=3, b= ['a','b'], c=1)
-        >>> others = (other,)
-        >>> res = self.concat(other)
-        >>> assert list(res.d) == ['hi'] * 3 + [None] * 2
-        >>> assert list(res.c) == [None] * 3 + [1] * 2        
+        >>> from mombai import *
+        >>> others = (Dictable(a=3, b= ['a','b'], c=1),Dictable(a=[1,2,3,], b=[[5]], d='hi'))
+        >>> res = Dictable.concat(*others)
+        >>> assert list(res.d) == [None] * 2 + ['hi'] * 3  
+        >>> assert list(res.c) == [1] * 2 + [None] * 3        
         """
         others = args_to_list(others)
         others = [cls(other) for other in others]
@@ -678,10 +681,7 @@ class Dictable(Dict):
         other = type(self)(other)
         pair = self.pair(other, on_left, on_right)
         return self._join(pair, other) + self._right_xor(pair, other)
-    
-    def to_df(self):
-        return pd.DataFrame(self)
-    
+        
     def to_tree(self, pattern, tree = dict):
         """
         self = Dictable(name = ['alan', 'beth', 'charles'], surname = ['smith', 'jones', 'patel'], gender = ['m','f','m'])

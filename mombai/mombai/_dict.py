@@ -70,17 +70,17 @@ class Dictattr(dict):
 
 def _where(cond, key, value):
     """
-    
-    def where(self, cond, key = lambda a, b: a +b):
-        self[key] = _where(cond, key, function)(self[key], **self)
+    condition can be both a function or a constant value
+    value can be both a function or a constant value
     """
     condition = relabel(cond if callable(cond)  else partial(eq , y = cond))
-    function = relabel(value if callable(value) else lambda : value)
+    function = relabel(value if callable(value) else lambda *args, **kwargs: value)
     def wrapped(*args, **kwargs):
-        if condition(*args, **{k:v for k,v in kwargs.items() if k!=key}):
+        kwargs_ = {k:v for k,v in kwargs.items() if k!=key}
+        if condition(*args, **kwargs_):
             return args[0]
         else:
-            return function(**kwargs)
+            return function(*args, **kwargs_)
     return wrapped        
 
 def _mask(cond, key, value):
@@ -91,10 +91,11 @@ def _mask(cond, key, value):
         self[key] = where(cond, key, function)(self[key], **self)
     """
     condition = relabel(cond if callable(cond)  else partial(eq , y = cond))
-    function = relabel(value if callable(value) else lambda : value)
+    function = relabel(value if callable(value) else lambda *args, **kwargs: value)
     def wrapped(*args, **kwargs):
-        if condition(*args, **{k:v for k,v in kwargs.items() if k!=key}):
-            return function(**kwargs)
+        kwargs_ = {k:v for k,v in kwargs.items() if k!=key}
+        if condition(*args, **kwargs_):
+            return function(*args, **kwargs_)
         else:
             return args[0]
     return wrapped
@@ -271,39 +272,64 @@ class Dict(Dictattr):
                 res[key] = func(res[key], **(res-key))
         return res
 
-    def where(self, cond, **functions):
+    def where(self, cond, *function, **functions):
         """
+        where and mask implement a similar interface to pd.DataFrame
+        :cond is checked against all keys that are in functions. This can be a function or just a simple constant value
+        :function is a single value function that is applied uniformly to all keys
+        :functions is a dict of values to which the keys are changed if the coditioned isn't matched
+
         >>> d = Dict(a = None, b=None, c='1')
-        >>> x = d.where('not me', a=0, b=1, c=2)
-        >>> assert x == Dict(a=0, b=1, c=2)
-        >>> y = d.mask(lambda value: value is not None, a=0, b=1, c=2)
-        >>> assert y == Dict(a=None, b=None, c=2)
+        >>> x = d.where('not true', a=0, b=1, c=2)
+        >>> assert x == Dict(a=0, b=1, c=2) ## condition is False always, so all values are changed
+        >>> assert d.where(lambda value: value is None, a=0, b=1, c=2) == Dict(a=None, b=None, c=2) ## only c is changed
+        >>> assert d.where(None, a = 0, b=1, c=2) == Dict(a=None, b=None, c=2) ## Can be done using a simple equality
+        >>> assert d.where(None, a=float, b=float, c=float) == Dict(a=None, b=None, c=0.0) ## converts to float values that are not None
+        >>> assert d.where(None, float) == Dict(a=None, b=None, c=0.0) ## converts to float values that are not None
         
+        >>> d = Dict(a = None, b=None, c='1')
+        >>> x = d.where(lambda value: value is not None, a=0, b=0, c=0)
+        >>> assert x == Dict(a=0, b=1, c='1')
+        
+        :using a condition that is a type
         >>> d = Dict(a = '1', b = 2, c = 3.0)
-        >>> assert d.where(str, a = lambda a: float(a)) == Dict(a = 1.0, b = 2.0, c=3.0) ## what isn't float is converted to float
+        >>> assert d.mask(str, a = lambda a: float(a)) == Dict(a = 1.0, b = 2.0, c=3.0) ## what isn't float is converted to float        
         """
         res = self.copy()
-        for key, value in functions.items():
+        mappers = {key : function[0] for key in self} if len(function) ==1 else {}
+        mappers.update(functions)
+        for key, value in mappers.items():
             res[key]= self._precall(_where(cond, key, value))(res[key], **res)
         return res
 
-    def mask(self, cond, **functions):
+    def mask(self, cond, *function, **functions):
         """
-        >>> d = Dict(a = None, b=None, c='not none ') 
-        >>> x = d.mask(None, a=0, b=1, c=2) # if key is None, return 0 to column a, 1 to b etc..
-        >>> assert x == Dict(a = 0, b = 1, c = 'not none ')
+        where and mask implement a similar interface to pd.DataFrame
+        :cond is checked against all keys that are in functions. This can be a function or just a simple constant value
+        :function is a single value function that is applied uniformly to all keys
+        :functions is a dict of values to which the keys are changed if the coditioned isn't matched
+
+        >>> d = Dict(a = None, b=None, c='1')
+        >>> assert d.mask('not true', a=0, b=1, c=2) == d ## condition is False always, so all values are unchanged
+        >>> assert d.mask(False, a=0, b=1, c=2) == d ## condition is False always, so all values are unchanged
+        >>> assert d.mask(None, a=0, b=1, c=2) == Dict(a=0, b=1, c='1') ## only c is changed
+        >>> assert d.mask(None, 0) == Dict(a=0, b=0, c='1') ## Can be done using a simple equality
+        >>> assert d.mask(None, 0, b=1) == Dict(a=0, b=1, c='1') ## every None goes to 0 except b
+        >>> assert d.mask(lambda value: value is not None, float) == Dict(a=None, b=None, c=0.0) ## converts to float values that are not None
+        >>> assert d.where(None, float) == Dict(a=None, b=None, c=0.0) ## converts to float values that are not None
         
-        >>> y = d.mask(lambda col: not isinstance(col, int), a=0, b=1, c=2)
-        >>> assert y == Dict(a = 0, b = 1, c = 2)
+        >>> d = Dict(a = None, b=None, c='1')
+        >>> x = d.where(lambda value: value is not None, a=0, b=0, c=0)
+        >>> assert x == Dict(a=0, b=1, c='1')
         
-        >>> z = d.mask(None, a = lambda c: c*2) # if a is None, return c*2
-        >>> assert z == Dict({'a': 'not none not none ', 'b': None, 'c': 'not none '})
-        
+        :using a condition that is a type
         >>> d = Dict(a = '1', b = 2, c = 3.0)
-        >>> assert d.mask(str, a = lambda a: int(a)) == Dict(a = 1, b = 2, c=3.0)
+        >>> assert d.mask(str, a = lambda a: float(a)) == Dict(a = 1.0, b = 2.0, c=3.0) ## what isn't float is converted to float        
         """
         res = self.copy()
-        for key, value in functions.items():
+        mappers = {key : function[0] for key in self} if len(function) ==1 else {}
+        mappers.update(functions)
+        for key, value in mappers.items():
             res[key] = res._precall(_mask(cond, key, value))(res[key], **res)
         return res
 
