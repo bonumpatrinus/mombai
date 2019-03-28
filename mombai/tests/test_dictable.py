@@ -289,7 +289,7 @@ def test_Dictable_mask():
     d = Dictable(a = [None, None], b=[None, 2], c= [1, '2'])
     d.c
     assert d.mask(None, a=0, b=1, c=2) == Dictable(a = [0,0], b=[1,2], c = [1, '2'])
-    y = d.mask(lambda value: value is None, a=0, b=lambda c: c*2, c=2)
+    y = d.mask(lambda value: value is None, a=0, b=lambda value, c: c*2, c=2)
     assert y == Dictable(a = 0, b=2, c = [1, '2'])
 
 def test_Dict_where():

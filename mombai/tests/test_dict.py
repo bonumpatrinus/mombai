@@ -2,7 +2,6 @@ from mombai._dict import Dict, slist, Dictattr
 import pytest
 
 d = Dict(a=1, b=2, c=3, d=4)    
-    
 
 def test_Dictattr():
     a = Dictattr(a = 1, b = 2)
@@ -71,7 +70,7 @@ def test_Dict_dir():
 
 def test_Dict__getattr__():
     assert d.a == d['a']
-    with pytest.raises(KeyError):
+    with pytest.raises(AttributeError):
         d.x
 
 
@@ -88,6 +87,15 @@ def test_Dict__delattr___():
     assert 'e' in d.keys()
     del d.e
     assert d == Dict(a=1, b=2, c=3, d=4)    
+    
+def test_Dict_raises_AttributeError():
+    with pytest.raises(AttributeError):
+        del d.not_there
+
+def test_hasattr_works():
+    assert not hasattr(d, 'not_there')
+    assert hasattr(d, 'a')
+
 
 def test_Dict_apply():
     d = Dict(a=1, b=2, c=3, d=4)    
@@ -107,7 +115,7 @@ def test_Dict_mask():
     d = Dict(a = None, b=None, c='1')
     x = d.mask(None, a=0, b=1, c=2)
     assert x == Dict(a=0, b=1, c='1')
-    y = d.mask(lambda value: value is None, a=0, b=lambda c: c*2, c=2)
+    y = d.mask(lambda value: value is None, a=0, b=lambda value, c: c*2, c=2)
     assert y == Dict(a=0, b='11', c='1')
 
 def test_Dict_where():
@@ -116,4 +124,18 @@ def test_Dict_where():
     assert x == Dict(a=0, b=1, c=2)
     y = d.mask(lambda value: value is not None, a=0, b=1, c=2)
     assert y == Dict(a=None, b=None, c=2)
+
+def test_Dict_where_advance():
+    d = Dict(a=None, b=None, c='1')
+    assert d.where(None, float) == Dict(a=None, b=None, c=1.0)
+    assert d.where(lambda value: value is not None, 0) == Dict(a=0, b=0, c='1')
+    assert d.where(lambda value: value is not None, 0, b='exception') == Dict(a=0, b='exception', c='1')
     
+def test_Dict_mask_advance():
+    d = Dict(a=None, b=None, c='1')
+    assert d.mask(None, 0) == Dict(a=0, b=0, c='1')
+    assert d.mask(None, 0).mask(lambda value: isinstance(value, str), float) == Dict(a=0, b=0, c=1.0)
+    assert d.mask(lambda value: value is None, 0) == Dict(a=0, b=0, c='1')
+    assert d.mask(None, 0, b='exception') == Dict(a=0, b='exception', c='1')
+    e = Dict(a = 1, b=10, c=100, d = -999)
+    assert e.mask(-999, 0).mask(lambda v: isinstance(v, int), str) == Dict(a = '1', b='10', c='100', d = '0')
