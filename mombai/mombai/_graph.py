@@ -1,6 +1,6 @@
 import networkx as nx
 from mombai._dict import Dictattr
-from mombal._cell import Cell
+from mombai._cell import Cell, Hash
 from mombai._containers import as_list, is_array
 
 def _as_dict(value):
@@ -22,9 +22,38 @@ def _is_edge(key):
 def _graph(Graph):
     """
     networkx graph with a quicker interface and support to adding cells to it
-    This is implemented on all networkx graphs so we implement it as a function of Class
-    
-    additional api:
+    This is implemented on all networkx graphs so we implement it as a function of Class    
+    """
+    class _Graph(Graph):
+
+        @classmethod
+        def key(self, key):
+            return key
+        
+        def __getitem__(self, key):
+            key = self.key(key)
+            if _is_edge(key):
+                return _as_value(self.edges[key[0], key[1]])
+            else:
+                return _as_value(self.nodes[key])
+
+        def __setitem__(self, key, value):
+            key = self.key(key)
+            d = _as_dict(value)
+            if _is_edge(key):
+                self.add_edge(key[0], key[1], **d)
+            else:
+                self.add_node(key, **d)
+                
+        def __delitem__(self, key):
+            key = self.key(key)
+            if _is_edge(key):
+                self.remove_edge(key[0], key[1])
+            else:
+                self.remove_node(key)
+                
+    _Graph.__doc__ = """Additional api over networkx graph:
+
     # g['node'] = node   # to set the nodes
     # g['node']          # to access the node
     # del g['node']      # to delete the node
@@ -32,28 +61,17 @@ def _graph(Graph):
     # g['a', 'b'] = edge   # to set the edge from a to b
     # g['a', 'b']          # to access the edge 
     # del g['a', 'b']      # to delete the edge
+    
+    """ + Graph.__doc__                
+    return _Graph
 
-    """
-    class _Graph(Graph):
+def _graph_with_cells(Graph):
 
-        def __getitem__(self, key):
-            if _is_edge(key):
-                return _as_value(self.edges[key[0], key[1]])
-            else:
-                return _as_value(self.nodes[key])
-
-        def __setitem__(self, key, value):
-            d = _as_dict(value)
-            if _is_edge(key):
-                self.add_edge(key[0], key[1], **d)
-            else:
-                self.add_node(key, **d)
-        def __delitem__(self, key):
-            if _is_edge(key):
-                self.remove_edge(key[0], key[1])
-            else:
-                self.remove_node(key)
-                
+    class _Graph(Graph):        
+        @classmethod
+        def key(self, key):
+            return (Hash(key[0]), Hash(key[1])) if _is_edge(key) else Hash(key)
+        
         def add_parent(self, child, parent):
             graph = self
             if isinstance(parent, Cell):
@@ -75,7 +93,13 @@ def _graph(Graph):
                 for c in cell:
                     graph = graph + c
             return graph
-                   
+
+    _Graph.__doc__ = """Added feauture: keys are always hashed but can be accessed either by the hash or the original value, 
+    Support for adding Cell to the graph, adding for each cell its parents automatically\n\n
+    """ + Graph.__doc__
+                  
     return _Graph
 
 DAG = _graph(nx.DiGraph)
+XCL = _graph_with_cells(DAG)
+
