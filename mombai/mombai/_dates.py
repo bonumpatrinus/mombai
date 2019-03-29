@@ -9,11 +9,11 @@ This module provides an easy function called dt:
 dt is a parsing function for dates
 """
 
-def today():
+def today(date=None):
     """
     Today, without fraction of day
     """
-    now = datetime.datetime.now()
+    now = date or datetime.datetime.now()
     return datetime.datetime(now.year, now.month, now.day)
 
 def _int2dt(arg=0):
@@ -153,3 +153,11 @@ def as_mm(month):
             return _month2mm[month.lower()]
     return as_mm(dt(month))
 
+def seconds_of_day(date=None):
+    date = dt.now() if date is None else dt(date)
+    day = date - today(date)
+    return day.seconds + day.microseconds/1e6
+
+_SECONDS_IN_A_DAY = 24 * 60 * 60
+def fraction_of_day(date=None):
+    return seconds_of_day(date) / _SECONDS_IN_A_DAY

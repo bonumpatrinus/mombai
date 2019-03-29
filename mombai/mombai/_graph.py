@@ -1,7 +1,9 @@
 import networkx as nx
-from mombai._dict import Dictattr
-from mombai._cell import Cell, Hash
+from mombai._cell import Cell, Hash, _per_cell
 from mombai._containers import as_list, is_array
+from mombai._dictable import Dictable
+from functools import partial
+from copy import copy, deepcopy
 
 def _as_dict(value):
     if isinstance(value, dict):
@@ -65,6 +67,26 @@ def _graph(Graph):
     """ + Graph.__doc__                
     return _Graph
 
+
+_to_id = partial(_per_cell, f = lambda v: 'Cell[%i]'%v.id)
+
+def _from_id(value, graph):
+    if is_array(value):
+        return [_from_id(v, graph) for v in value]
+    elif isinstance(value, str) and value.startswith('Cell[') and value.endswith(']'):
+        return graph[int(value[5:-1])]
+    else:
+        return value
+
+def _to_id(value):
+    if is_array(value):
+        return [_to_id(v) for v in value]
+    elif isinstance(value, Cell):
+        return 'Cell[%i]'%value.id
+    else:
+        return value
+
+
 def _graph_with_cells(Graph):
 
     class _Graph(Graph):        
@@ -81,7 +103,27 @@ def _graph_with_cells(Graph):
                 for p in parent:
                     graph.add_parent(child, p)
             return graph
-
+        
+        def to_id(self):
+            result = deepcopy(self)
+            for node in result.nodes:
+                c = copy(result[node])
+                c.function = _to_id(c.function)
+                c.args = _to_id(c.args)
+                c.kwargs = {key : _to_id(value) for key, value in c.kwargs.items()}
+                result[node] = c
+            return result
+        
+        def from_id(self):
+            result = copy(self)
+            for node in nx.topological_sort(self):
+                c = result[node]
+                c.function = _from_id(c.function, result)
+                c.args = _from_id(c.args, result)
+                c.kwargs = {key : _from_id(value, result) for key, value in c.kwargs.items()}
+                result[node] = c
+            return result        
+                
         def __add__(self, cell):
             graph = self
             if isinstance(cell, Cell):
@@ -93,7 +135,22 @@ def _graph_with_cells(Graph):
                 for c in cell:
                     graph = graph + c
             return graph
+        
+        def to_table(self):
+            rs = Dictable(node_id = list(nx.topological_sort(self)))
+            rs = rs(node = lambda node_id: self[node_id])
+            rs = rs(function = lambda node: node.function)
+            rs = rs(args = lambda node: node.args)
+            rs = rs(kwargs = lambda node: node.kwargs)
+            rs = rs(node = lambda node: node.node)
+            return rs
+        
+        def __rep__(self):
+            return self.to_table().__repr__()
 
+        def __str__(self):
+            return self.to_table().__str__()
+            
     _Graph.__doc__ = """Added feauture: keys are always hashed but can be accessed either by the hash or the original value, 
     Support for adding Cell to the graph, adding for each cell its parents automatically\n\n
     """ + Graph.__doc__

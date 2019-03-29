@@ -1,6 +1,6 @@
 import numpy as np
 from mombai._containers import as_list, is_array
-from mombai._dates import dt
+from mombai._dates import dt, fraction_of_day, seconds_of_day
 from functools import partial
 import datetime
 
@@ -12,6 +12,9 @@ def _per_cell(value, f):
         return f(value)
     else:
         return value
+
+_call = partial(_per_cell, f = lambda v: v())
+
 
 def _as_asof(asof):
     if asof is None:
@@ -28,7 +31,7 @@ def Hash(value):
     _hash of _hash is the same due to integers not being hashable
     _hash of dict and list are implemented
     """
-    if isinstance(value, int):
+    if isinstance(value, (int, np.int64, np.int32)):
         return value
     elif isinstance(value, tuple):
         return hash(tuple(value))
@@ -37,7 +40,6 @@ def Hash(value):
     else:
         return hash(value)
 
-_call = partial(_per_cell, f = lambda v: v())
         
 class Cell(object):
     """
@@ -113,5 +115,25 @@ class MemCell(Cell):
         else:
             value = self.cache[self.last_updated()]
         self.cache[stamp] = value
-        return value            
+        return value
+    
+class EODCell(MemCell):
+    """
+    Calculate on update or on a new day. If seconds_of_day is provided, will "reset" at that time
+    """
+    def __init__(self, node, function, *args, **kwargs):
+        self.seconds_of_day = kwargs.pop('seconds_of_day', 0)
+        super(EODCell, self).__init__(node, function, *args, **kwargs)
+
+    def eod(self, date = None):
+        """
+        returns the previous EOD. If that is greater than last update, we need to re-run function
+        """
+        now = date or dt.now()
+        rtn = dt.today(now) + datetime.timedelta(seconds = self.seconds_of_day)
+        return rtn if rtn<now else rtn - datetime.timedelta(1)
+        
+    def update(self):
+        last_updated = self.last_updated()
+        return last_updated is None or last_updated<self.eod() or _update(self.function) or _update(self.args) or _update(list(self.kwargs.values()))
 
