@@ -59,6 +59,5 @@ class MDS(list):
     def __lt__(self, date):
         t = dt(date)
         return MDS([d for d in self if 'asof' not in d or d.get('asof')<t])
-
-
+        
 

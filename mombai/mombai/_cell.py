@@ -1,6 +1,7 @@
 import numpy as np
 from mombai._containers import as_list, is_array
 from mombai._dates import dt, fraction_of_day, seconds_of_day
+from mombai._dict import Dict
 from functools import partial
 import datetime
 
@@ -40,7 +41,32 @@ def Hash(value):
     else:
         return hash(value)
 
-        
+def _getattr(obj, attr):
+    """
+    A simple extension of getattr(obj, attr) to allow us to _getattr(obj, 'call') which is slightly prettier
+    """
+    if hasattr(obj, attr):
+        return getattr(obj, attr)
+    else:
+        objattrs = [a for a in dir(obj) if a.replace('_', '') == attr]
+        if len(objattrs) == 1:
+            return getattr(obj, objattrs[0])
+    raise AttributeError('Attribute %s not found in %s'%(attr, obj))
+
+
+def callattr(obj, attr='call', *args, **kwargs):
+    """
+    small wrappper to allow us to implement calling of an object attributes
+    """
+    return _getattr(obj, attr)(*args, **kwargs)
+
+def callitem(obj, item, *args, **kwargs):
+    """
+    small wrappper to allow us to implement calling of an object attributes
+    """
+    return obj[item](*args, **kwargs)
+
+       
 class Cell(object):
     """
     basic cell, no cache and no persistence
@@ -57,6 +83,7 @@ class Cell(object):
         self.function = function
         self.args = args
         self.kwargs = kwargs
+        self.params = Dict()
 
     @property
     def id(self):
@@ -70,20 +97,22 @@ class Cell(object):
         first of all evaluates the parents and then evaluates the self.function itself
         """
         function = _call(self.function)
+        if not callable(function):
+            return function
         args = (_call(arg) for arg in self.args)
         kwargs = {key: _call(value) for key, value in self.kwargs.items()}
         return function(*args, **kwargs)
     
-    def update(self):
+    def calc(self):
         """ by default, unless a Cell has been declared to be cached, we assume it is volatile and return True """
         return True
 
 def _update(arg):
     """
-    returns the max of all cell.update() in arg
+    returns the max of all cell.calc() in arg
     """
     if isinstance(arg, Cell):
-        return arg.update()
+        return arg.calc()
     elif is_array(arg):
         for a in arg:
             if _update(a):
@@ -100,9 +129,13 @@ class MemCell(Cell):
 
     def _load_cache(self):
         """ for a file-based or db-based cache, we can implement this"""
-        return {}
+        return Dict()
+
+    def _to_cache(self, cache):
+        """ for a file-based or db-based cache, we can implement this"""
+        return cache
     
-    def update(self):
+    def calc(self):
         return len(self.cache) == 0 or _update(self.function) or _update(self.args) or _update(list(self.kwargs.values()))
         
     def last_updated(self):
@@ -110,30 +143,31 @@ class MemCell(Cell):
 
     def __call__(self):
         stamp = datetime.datetime.now()
-        if self.update():
+        if self.calc():
             value = super(MemCell, self).__call__()
         else:
             value = self.cache[self.last_updated()]
         self.cache[stamp] = value
         return value
-    
+
 class EODCell(MemCell):
     """
-    Calculate on update or on a new day. If seconds_of_day is provided, will "reset" at that time
+    Calculate on update or on a new day. If eod is provided (in seconds), will "reset" at that time
     """
     def __init__(self, node, function, *args, **kwargs):
-        self.seconds_of_day = kwargs.pop('seconds_of_day', 0)
+        eod = kwargs.pop('eod', 0)
         super(EODCell, self).__init__(node, function, *args, **kwargs)
+        self.params.eod = eod
 
-    def eod(self, date = None):
+    def last_eod(self, date = None):
         """
         returns the previous EOD. If that is greater than last update, we need to re-run function
         """
         now = date or dt.now()
-        rtn = dt.today(now) + datetime.timedelta(seconds = self.seconds_of_day)
+        rtn = dt.today(now) + datetime.timedelta(seconds = self.params.eod)
         return rtn if rtn<now else rtn - datetime.timedelta(1)
         
-    def update(self):
+    def calc(self):
         last_updated = self.last_updated()
-        return last_updated is None or last_updated<self.eod() or _update(self.function) or _update(self.args) or _update(list(self.kwargs.values()))
+        return last_updated is None or last_updated<self.last_eod() or _update(self.function) or _update(self.args) or _update(list(self.kwargs.values()))
 
