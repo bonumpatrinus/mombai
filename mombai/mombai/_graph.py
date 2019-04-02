@@ -150,7 +150,7 @@ def _graph_with_cells(Graph):
             return result
 
         def from_id(self):
-            result = copy(self)
+            result = deepcopy(self)
             for node in nx.topological_sort(self):
                 c = result[node]
                 print (node, c)
