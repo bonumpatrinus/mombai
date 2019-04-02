@@ -1,4 +1,5 @@
 from mombai._graph import XCL, DAG, jp, Cell, Hash
+from operator import add
 
 
 def test_DAG_set_get_del_nodes():
@@ -120,3 +121,33 @@ def test_XCL_add():
     g += f
     assert d in g and e in g and f in g
     assert g[f]() == 7
+
+def test_XCL_to_from_id():
+    a = Cell(0, 0)
+    b = Cell(1, 1)
+    c = Cell(2, 2)
+    d = Cell(3, add, a, b)
+    e = Cell(4, add, c, d)
+    f = Cell(5, sum, [a,b,c,d,e])    
+    g = XCL()
+    g+= f
+    h = g.to_id()
+    i = h.from_id()
+    assert g[f].args[0] == [a,b,c,d,e]
+    assert h[f].args[0] == ['@0', '@1', '@2', '@3', '@4']
+    assert i[f].args[0] == [i[a],i[b],i[c],i[d], i[e]]
+
+def test_XCL_to_from_id_different_id_types():
+    a = Cell(0, 0)
+    b = Cell('b', 1)
+    c = Cell(dict(a=1,b=2), 2)
+    d = Cell(3, add, a, b)
+    e = Cell(4, add, c, d)
+    f = Cell(5, sum, [a,b,c,d,e])    
+    g = XCL()
+    g+= f
+    h = g.to_id()
+    i = h.from_id()
+    assert g[f].args[0] == [a,b,c,d,e]
+    assert h[f].args[0] == ['@0','@b','@%i'%c.id, '@3' ,'@4']
+    assert i[f].args[0] == [i[a],i[b],i[c],i[d], i[e]]
