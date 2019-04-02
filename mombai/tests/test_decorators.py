@@ -1,4 +1,5 @@
 from mombai._decorators import getargspec, ARGSPEC, getargs, decorate, cache, try_value, try_back, try_none, try_list, try_str, try_dict, try_nan, try_zero, support_kwargs, relabel
+from mombai._decorators import list_loop, dict_loop, callattr, callitem, Hash
 import numpy as np
 from functools import partial
 import datetime
@@ -123,4 +124,31 @@ def test_support_kwargs_with_varkw():
     support_kwargs()(function)(x=1, b=2, c=3) == 'xbbccc'
     support_kwargs(dict(x='a'))(function)(a=1, b=2, c=3) == 'xbbccc'
     support_kwargs(dict(x='a', y='b'))(function)(x=1, b=2, c=3) == 'xbbccc' # we never relabel kwargs. so 'b' is passed to the function rather than 'y'        
+
+def test_Hash():
+    d = dict(a = 1, b=2)
+    assert Hash(d) == hash(tuple(sorted(d.items())))
+    lst = [1,2,3]
+    assert Hash(lst) == hash(tuple(lst))
+    i = 5
+    assert Hash(i) == i
+
+def test_callitem():
+    d = dict(a = lambda x,y,z=1: x+y+z, b = lambda x, y, z=2: x*y*z)
+    assert callitem(d, 'a', 3, 2) == 6 #args
+    assert callitem(d, 'a', x=3, y=2) == 6 #kwargs
+    assert callitem(d, 'a', 3, y=2) == 6 #mixture
+    assert callitem(d, 'b', 3, 2) == 12
+
+
+def test_callattr():
+    from mombai._dict import Dict
+    a = lambda x,y,z=1: x+y+z; b = lambda x, y, z=2: x*y*z
+    d = Dict(a=a, b=b, c=1, d=2)
+    e = Dict(a=a, b=b, c=1, d=2, e = 3)
+    assert callattr(d, 'sub', 'a') == Dict(b = b, c=1, d=2)
+    assert callattr(d, 'call', e = lambda c, d: c+d) == e
+    assert callattr(d, 'a', 3, 2) == 6
+    assert callattr(d, 'a', x=3, y=2) == 6
+    assert callattr(d, 'a', 3, y=2) == 6
 
