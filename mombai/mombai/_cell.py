@@ -1,5 +1,6 @@
 import numpy as np
 from mombai._containers import as_list, is_array
+from mombai._decorators import Hash
 from mombai._dates import dt, fraction_of_day, seconds_of_day
 from mombai._dict import Dict
 from functools import partial
@@ -26,46 +27,6 @@ def _as_asof(asof):
         return datetime.datetime.now() - asof
     return dt(asof)
         
-
-def Hash(value):
-    """
-    _hash of _hash is the same due to integers not being hashable
-    _hash of dict and list are implemented
-    """
-    if isinstance(value, (int, np.int64, np.int32)):
-        return value
-    elif isinstance(value, list):
-        return hash(tuple(value))
-    elif isinstance(value, dict):
-        return hash(tuple(sorted(value.items())))
-    else:
-        return hash(value)
-
-def _getattr(obj, attr):
-    """
-    A simple extension of getattr(obj, attr) to allow us to _getattr(obj, 'call') which is slightly prettier
-    """
-    if hasattr(obj, attr):
-        return getattr(obj, attr)
-    else:
-        objattrs = [a for a in dir(obj) if a.replace('_', '') == attr]
-        if len(objattrs) == 1:
-            return getattr(obj, objattrs[0])
-    raise AttributeError('Attribute %s not found in %s'%(attr, obj))
-
-
-def callattr(obj, attr='call', *args, **kwargs):
-    """
-    small wrappper to allow us to implement calling of an object attributes
-    """
-    return _getattr(obj, attr)(*args, **kwargs)
-
-def callitem(obj, item, *args, **kwargs):
-    """
-    small wrappper to allow us to implement calling of an object attributes
-    """
-    return obj[item](*args, **kwargs)
-
        
 class Cell(object):
     """

@@ -55,7 +55,29 @@ def _hashable(key):
     >>> assert not _hashable(key)
     """
     return min([_hashable(k) for k in key]) if isinstance(key, tuple) and len(key) else isinstance(key, collections.Hashable)
-    
+
+def _prehash(value):
+    """
+    make list and dicts more hashable
+    """
+    if isinstance(value, list):
+        return tuple(value)
+    elif isinstance(value, dict):
+        return tuple(sorted(value.items()))
+    else:
+        return value
+
+def Hash(value):
+    """
+    _hash of _hash is the same due to integers not being hashable
+    _hash of dict and list are implemented
+    """
+    value = _prehash(value)
+    if isinstance(value, (int, np.int64, np.int32)):
+        return value
+    else:
+        return hash(value)
+
 
 def _cache_key(function):
     args = getargs(function)
@@ -88,7 +110,7 @@ def cache_method(function):
     def _key(*args, **kwargs):
         return (name, args[1:], tuple(kwargs.items()))
     def wrapped(*args, **kwargs):
-        key = _key(*args, **kwargs)
+        key = _prehash(_key(*args, **kwargs))
         me = args[0]
         if _hashable(key):
             me.cache = getattr(me, 'cache', {})
@@ -104,7 +126,7 @@ def cache_func(function):
     def _key(*args, **kwargs):
         return (args, tuple(kwargs.items()))
     def wrapped(*args, **kwargs):
-        key = _key(*args, **kwargs)
+        key = _prehash(_key(*args, **kwargs))
         if _hashable(key):
             wrapped.cache =  getattr(wrapped, 'cache', {})
             if key not in wrapped.cache:
@@ -179,7 +201,7 @@ def relabel(key, relabels=None):
     Now, relabels can be a function rather than just a dict: 
     >>> assert relabel(dict(a = 1, b=2, c=3), lambda label: label*2) == {'aa': 1, 'bb': 2, 'cc': 3}
     
-    Finally, a special case. If relabels is a string, we treat it as a function that replaces 'label' with that string:
+    As a special case. If relabels is a string, we treat it as a function that replaces 'label' with that string:
     >>> assert relabel('label_in_text_is_renamed', 'market') == 'market_in_text_is_renamed'
 
     Lastly, if key is a FUNCTION. Then we essentially use the relabels to change the function signature.
@@ -223,13 +245,13 @@ def support_kwargs(relabels=None):
     >>> relabeled_func = support_kwargs(relabels)(func)
     >>> assert getargspec(relabeled_func).args == ['a', 'BB', 'C']
     >>> assert relabeled_func(1,2,3) == 6
-    >>> assert relabeled_func(a=1,BB=2,C=3)==6
+    >>> assert relabeled_func(a=1,BB=2,C=3,other_parameters_that_are_now_ignaored = 100)==6
     
     Now, let us examine where the function already supports kwargs, we add relabeling for the args only!
-    >>> function = lambda x, **kwargs : ''.join(['x'*x] + [key*value for key, value in kwargs.items()]) 
-    >>> assert support_kwargs()(function)(x=1, b=2, c=3) == 'xbbccc'
-    >>> assert support_kwargs(dict(x='a'))(function)(a=1, b=2, c=3) == 'xbbccc'
-    >>> assert support_kwargs(dict(x='a', y='b'))(function)(x=1, b=2, c=3) == 'xbbccc' # we never relabel kwargs. so 'b' is passed to the function rather than 'y'        
+    >>> function = lambda x, **kwargs : ' '.join(['x'*x] + [key*value for key, value in kwargs.items()]) 
+    >>> assert support_kwargs()(function)(x=1, b=2, c=3) == 'x bb ccc'
+    >>> assert support_kwargs(dict(x='a'))(function)(a=1, b=2, c=3) == 'x bb ccc'
+    >>> assert support_kwargs(dict(x='a', y='b'))(function)(x=1, b=2, c=3) == 'x bb ccc' # we never relabel kwargs. so 'b' is passed to the function rather than 'y'        
     """
     relabels = relabels  or {}
     def decorator(function):
@@ -270,6 +292,9 @@ def profile(function):
     return decorate(wrapped, function)
 
 def dict_loop(function):
+    """
+    wraps a function to loop over the first argument if it is a of a type dict
+    """
     argspec = getargspec(function)
     top = argspec.args[0] if argspec.args else ''
     def wrapped(*args, **kwargs):
@@ -290,6 +315,9 @@ def dict_loop(function):
 
 
 def array_loop(tp = list):
+    """
+    returns a decorator that wraps a function to loop over the first argument if it is a of a type tp
+    """
     def looper(function):
         argspec = getargspec(function)
         top = argspec.args[0] if argspec.args else ''
@@ -311,3 +339,28 @@ def array_loop(tp = list):
     return looper
 
 list_loop = array_loop(list)
+
+def _getattr(obj, attr):
+    """
+    A simple extension of getattr(obj, attr) to allow us to _getattr(obj, 'call') which is slightly prettier
+    """
+    if hasattr(obj, attr):
+        return getattr(obj, attr)
+    else:
+        objattrs = [a for a in dir(obj) if a.replace('_', '') == attr]
+        if len(objattrs) == 1:
+            return getattr(obj, objattrs[0])
+    raise AttributeError('Attribute %s not found in %s'%(attr, obj))
+
+
+def callattr(obj, attr='call', *args, **kwargs):
+    """
+    small wrappper to allow us to implement calling of an object attributes
+    """
+    return _getattr(obj, attr)(*args, **kwargs)
+
+def callitem(obj, item, *args, **kwargs):
+    """
+    small wrappper to allow us to implement calling of an object attributes
+    """
+    return obj[item](*args, **kwargs)
