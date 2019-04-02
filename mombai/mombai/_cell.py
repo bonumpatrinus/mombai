@@ -34,10 +34,10 @@ def Hash(value):
     """
     if isinstance(value, (int, np.int64, np.int32)):
         return value
-    elif isinstance(value, tuple):
+    elif isinstance(value, list):
         return hash(tuple(value))
     elif isinstance(value, dict):
-        return hash(sorted(value.items()))
+        return hash(tuple(sorted(value.items())))
     else:
         return hash(value)
 

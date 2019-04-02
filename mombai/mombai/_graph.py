@@ -21,6 +21,10 @@ def _as_value(d):
 def _is_edge(key):
     return isinstance(key, tuple) and len(key) == 2
 
+_is_ref = lambda s: isinstance(s, str) and s.startswith('@')
+_is_int = lambda s: (s.startswith('-') and s[1:].isdigit()) or s.isdigit()
+_to_id = partial(_per_cell, f = lambda v: '@%s'%(v.id if isinstance(v.node, dict) else v.node))
+
 
 def _graph(Graph):
     """
@@ -54,6 +58,10 @@ def _graph(Graph):
                 self.remove_edge(key[0], key[1])
             else:
                 self.remove_node(key)
+
+        def __contains__(self, key):
+            key = self._key(key)
+            return key in self.edges if _is_edge(key) else key in self._node
                 
         def remove_node(self, node = None):
             if node is None:
@@ -62,7 +70,7 @@ def _graph(Graph):
                 for n in node:
                     self.remove_node(n)
             else:
-                super(_Graph, self).remove_node(n)
+                super(_Graph, self).remove_node(node)
         
         def remove_edge(self, u = None, v = None):
             if u is None:
@@ -86,9 +94,6 @@ def _graph(Graph):
     """ + Graph.__doc__                
     return _Graph
 
-_is_ref = lambda s: isinstance(s, str) and s.startswith('@')
-_is_int = lambda s: (s.startswith('-') and s[1:].isdigit()) or s.isdigit()
-_to_id = partial(_per_cell, f = lambda v: '@%s'%(v.id if isinstance(v.node, dict) else v.node))
 
 def _from_id(value, graph):
     if is_array(value):
