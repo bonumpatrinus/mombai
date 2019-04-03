@@ -68,6 +68,13 @@ class Cell(object):
         """ by default, unless a Cell has been declared to be cached, we assume it is volatile and return True """
         return True
 
+    def __repr__(self):
+        if not callable(self.function):
+            return '@%s: %s'%(self.id, self.function)
+
+        else:
+            return '@%s: %s'%(self.id, getattr(self.function, '__name__', self.function)) + '(' + (('%s'%list(self.args))[1:-1] if self.args else '') + (', **%s'%self.kwargs if self.kwargs else '') + ')'
+
 def _update(arg):
     """
     returns the max of all cell.calc() in arg
@@ -110,6 +117,9 @@ class MemCell(Cell):
             value = self.cache[self.last_updated()]
         self.cache[stamp] = value
         return value
+    
+    def __repr__(self):
+        return 'MemCell.last_updated=%s | '%self.last_updated() + super(MemCell, self).__repr__()
 
 class EODCell(MemCell):
     """
@@ -132,3 +142,5 @@ class EODCell(MemCell):
         last_updated = self.last_updated()
         return last_updated is None or last_updated<self.last_eod() or _update(self.function) or _update(self.args) or _update(list(self.kwargs.values()))
 
+    def __repr__(self):
+        return 'EODCell(eod=%s).last_updated=%s | '%(self.params.eod, self.last_updated()) + super(MemCell, self).__repr__()
