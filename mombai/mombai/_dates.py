@@ -4,6 +4,24 @@ from mombai._periods import _ymd2dt, day, Month, BusinessDay
 import numpy as np
 from functools import reduce
 from operator import __add__
+from functools import singledispatch
+
+@singledispatch
+def to_serializable(val):
+    """Used by default."""
+    return str(val)
+
+@to_serializable.register(datetime.datetime)
+def datetime_to_json(val):
+    """Used if *val* is an instance of datetime. to allow json serialisation
+    source code: https://hynek.me/articles/serialization/
+    >>> import json
+    >>> import datetime
+    >>> json.dumps({"msg": "hi", "ts": datetime.datetime.now(), 'date' : datetime.date(2019,1,1)}, default=to_serializable)
+    """
+    return val.isoformat() + "Z"
+
+
 """
 This module provides an easy function called dt:
 dt is a parsing function for dates
