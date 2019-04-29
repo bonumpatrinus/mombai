@@ -1,6 +1,14 @@
 from mombai._graph import XCL, DAG, jp, Cell, Hash
 from operator import add
 
+#q = Query()
+#db.insert(dict(a = 1, b = 'key'))
+#db.insert(dict(a = 2, b = 'key'))
+#db.all()
+#db.remove
+#db.remove(q.a.exists())
+#db.search(q.a >= 1)
+#db.all()
 
 def test_DAG_set_get_del_nodes():
     g = DAG()
@@ -151,3 +159,35 @@ def test_XCL_to_from_id_different_id_types():
     assert g[f].args[0] == [a,b,c,d,e]
     assert h[f].args[0] == ['@0','@b','@%i'%c.id, '@3' ,'@4']
     assert i[f].args[0] == [i[a],i[b],i[c],i[d], i[e]]
+
+
+def test_XCL_to_json():
+    a = Cell(0, 0)
+    b = Cell(1, 1)
+    c = Cell(2, 2)
+    d = Cell(3, add, a, b)
+    e = Cell(4, add, c, d)
+    f = Cell(5, sum, [a,b,c,d,e])    
+    g = XCL()
+    g+= f
+    j = g.to_json()
+    assert '[["@0", "@1", "@2", "@3", "@4"]]' in j 
+    assert '["@2", "@3"]' in j
+    assert '["@0", "@1"]' in j
+    assert 'add' in j
+    assert 'sum' in j
+    i = XCL.from_json(j)
+    assert i[f]() == 7
+    assert i[f].args[0] == [i[a],i[b],i[c],i[d], i[e]]
+
+def test_XCL_to_table():
+    a = Cell(0, 0)
+    b = Cell(1, 1)
+    c = Cell(2, 2)
+    d = Cell(3, add, a, b)
+    e = Cell(4, add, c, d)
+    f = Cell(5, sum, [a,b,c,d,e])    
+    g = XCL()
+    g+= f
+    j = g.to_table()
+    assert len(j) == len(g._node) and j.keys() == ['node_id', 'node', 'function', 'args', 'kwargs']    
