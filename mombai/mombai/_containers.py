@@ -72,7 +72,14 @@ class slist(list):
 
 class nplist(list):
     """
-    a list that supports the numpy interface. Does NOT accept bool arrays. This needs to be handled elsewhere
+    a list that supports most of the numpy interface for getitem. Does NOT accept bool arrays. This needs to be handled elsewhere
+    
+    >>> n = nplist(range(10))
+    >>> assert n[[0,2,3]] == nplist([0,2,3])
+    >>> assert n[0,2,3] == nplist([0,2,3])
+    >>> assert n[True] == range(10)[True]
+    
+    >>> assert n * 2 == nplist(list(range(10))*2)
     """
     def __getitem__(self, item):
         me = super(nplist, self).__getitem__
@@ -81,7 +88,7 @@ class nplist(list):
         else:
             return me(item)
     def __mul__(self, other):
-        return type(self) * super(nplist,self).__mul__(other)
+        return type(self)(super(nplist,self).__mul__(other))
     def __repr__(self):
         return 'nplist'+ super(nplist,self).__repr__()
     def __str__(self):
@@ -110,11 +117,11 @@ def as_ndarray(value):
     if len(set([type(v) for v in value]))==1:
         try:
             return np.array(value)
-        except ValueError:
+        except Exception:
             pass
     try:
         return np.array(value, dtype='object')
-    except ValueError:
+    except Exception:
         return value
     raise Exception('could not construct %s as an array' % value)
 
@@ -127,9 +134,6 @@ def as_str(value, max_rows = None, max_chars = None):
         return value.__str__()
     else:
         return '\n'.join([row[:max_chars] for row in value.__str__().split('\n')[:max_rows]])
-
-
-
 
 def _args_len(*values):
     lens = slist([len(value) for value in values]) - 1
@@ -197,13 +201,45 @@ def _getitem_as_array(iterable, item, check_bool = True):
     else:
         return iterable[item]
 
+def many2one(default = None):
+    """
+    returns a decorator for reducing array/dict into a single value
+    >>> from mombai._containers include many2one
+    >>> mini = many2one(np.nan)(min)
+    >>> maxi = many2one(np.nan)(max)
+
+    >>> assert np.isnan(mini([]))
+    >>> assert mini([1,2,3]) == 1
+    >>> assert mini(dict(a = 1, b = 2, c = 4)) == 1
+    >>> assert mini(dict(a = 1, b = 2, c = dict(x = [0,3], y=[4,5]))) == 0
+
+    >>> assert np.isnan(maxi([]))
+    >>> assert maxi([1,2,3]) == 3
+    >>> assert maxi(dict(a = 1, b = 2, c = 4)) == 4
+    >>> assert maxi(dict(a = 1, b = 2, c = dict(x = [0,3], y=[4,5]))) == 5
+    """
+    def decorator(function):
+        def wrapped(iterable, *args):
+            if isinstance(iterable, dict):
+                return wrapped(list(iterable.values()), *args)
+            elif is_array(iterable):
+                if len(iterable):
+                    return function([wrapped(v, *args) for v in iterable], *args)
+                else:
+                    return default
+            else:
+                return iterable
+        return wrapped
+    return decorator
+
+
 
 def concat(*arrays):
     """joins arrays together efficiently, using np.concatenate if arrays are ndarray, otherwise, using built in sum"""
     arrays = args_to_list(arrays)
     if len(arrays) == 0:
         return []
-    elif min([isinstance(arr, np.ndarray) for arr in arrays]):
+    elif min([isinstance(arr, np.ndarray) for arr in arrays]) and len(set([len(arr.shape) for arr in arrays])) == 1:
         return np.concatenate(arrays)
     else:
         return sum([as_list(arr) for arr in arrays], [])

@@ -5,6 +5,9 @@ import numpy as np
 from functools import reduce
 from operator import __add__
 from functools import singledispatch
+from  mombai._decorators import getargspec
+from inspect import FullArgSpec
+
 
 @singledispatch
 def to_serializable(val):
@@ -19,12 +22,12 @@ def datetime_to_json(val):
     >>> import datetime
     >>> json.dumps({"msg": "hi", "ts": datetime.datetime.now(), 'date' : datetime.date(2019,1,1)}, default=to_serializable)
     """
-    return val.isoformat() + "Z"
+    return val.isoformat()
 
 
 """
 This module provides an easy function called dt:
-dt is a parsing function for dates
+dt is our go-to parsing function for dates
 """
 
 def today(date=None):
@@ -35,7 +38,7 @@ def today(date=None):
     return datetime.datetime(now.year, now.month, now.day)
 
 def _int2dt(arg=0):
-    if arg<=0: ## treat as days from today
+    if arg<=1500: ## treat as days from today
         return today() + arg * day        
     if arg<=3000: # treat as year
         return datetime.datetime(arg,1,1)
@@ -108,7 +111,7 @@ def dt(*args):
     
     """
     if len(args) == 0:
-        return dt(0)
+        return datetime.datetime.now()
     if isinstance(args[0], np.datetime64):
         y = args[0].astype('datetime64[Y]').astype(int) + 1970
         month_start = args[0].astype('datetime64[M]')
@@ -137,8 +140,6 @@ def dt(*args):
         else:
             return _int2dt(int(arg)) + datetime.timedelta(float(arg) % 1)
 
-dt.now = datetime.datetime.now 
-dt.today = today   
 
 _futs = list('FGHJKMNQUVXZ')
 _months = ['january', 'february', 'march','april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
@@ -171,11 +172,58 @@ def as_mm(month):
             return _month2mm[month.lower()]
     return as_mm(dt(month))
 
-def seconds_of_day(date=None):
-    date = dt.now() if date is None else dt(date)
-    day = date - today(date)
+
+def timedelta_of_day(*date):
+    """
+    returns the time from start of day in timedelta format. 
+    """
+    if len(date) == 1 and isinstance(date[0], datetime.timedelta):
+        return date[0] - datetime.timedelta(date[0].days)
+    date = dt(*date)
+    return date - today(date)
+
+    
+def seconds_of_day(*date):
+    """
+    returns the seconds since start of day for a given date
+    >>> from mombai._dates import seconds_of_day
+    >>> assert seconds_of_day(dt('2001-04-01T06:00:00')) == 6 * 60 * 60
+    >>> assert seconds_of_day('2001-04-01T06:00:00') == 6 * 60 * 60
+    """
+    day = timedelta_of_day(*date)
     return day.seconds + day.microseconds/1e6
 
 _SECONDS_IN_A_DAY = 24 * 60 * 60
-def fraction_of_day(date=None):
-    return seconds_of_day(date) / _SECONDS_IN_A_DAY
+def fraction_of_day(*date):
+    """
+    returns the intraday time as a fraction of day
+    >>> from mombai._dates import fraction_of_day, _SECONDS_IN_A_DAY
+    >>> assert fraction_of_day(dt('2001-04-01T06:00:00')) == 0.25
+    >>> assert fraction_of_day('2001-04-01T06:00:01') == 0.25 +  1./_SECONDS_IN_A_DAY
+    """
+    return seconds_of_day(*date)/_SECONDS_IN_A_DAY
+
+def weekday(*date):
+    return dt(*date).weekday()
+
+def isoformat(*date):
+    return dt(*date).isoformat()
+
+
+def timestamp(*date):
+    return dt(*date).timestamp()
+
+def now(tz = None):
+    """
+    Weirdly, the datetime.datetime.now getargspec signature is wrong
+    """
+    return datetime.datetime.now(tz)
+
+dt.now = now 
+dt.today = today   
+dt.weekday = weekday
+dt.isoformat = isoformat
+dt.timestamp = timestamp
+
+
+

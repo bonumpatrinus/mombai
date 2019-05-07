@@ -68,6 +68,7 @@ class Dictattr(dict):
     def __dict__(self):
         return dict(self)
 
+         
 def _where(cond, key, value):
     """
     condition can be both a function or a constant value

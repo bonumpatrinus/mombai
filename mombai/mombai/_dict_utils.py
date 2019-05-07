@@ -231,9 +231,6 @@ def tree_items(tree, types = dict):
     else:
         return [(tree,)]
 
-
-
-
 def _is_pattern(pattern):
     if not isinstance(pattern, str):
         return False
@@ -311,14 +308,15 @@ def items_to_tree(items, tree = dict, raise_if_duplicate = True):
 def data_and_columns_to_dict(data=None, columns=None):
     """
     data is assumed to be a list of records (i.e. horizontal) rather than column inputs
+    >>> from mombai._compare import eq
     >>> data = [[1,2],[3,4],[5,6]]; columns = ['a','b']
-    >>> assert list(data_and_columns_to_dict(data, columns)['a']) == [1,3,5]
+    >>> assert data_and_columns_to_dict(data, columns) == {'a': (1, 3, 5), 'b': (2, 4, 6)}
     
     We can convert from pandas:
     >>> df = pd.DataFrame(data=data, columns = columns)
     >>> dfa = df.set_index('a')
-    >>> assert list(data_and_columns_to_dict(df)['a']) == [1,3,5]
-    >>> assert list(data_and_columns_to_dict(dfa)['a']) == [1,3,5]
+    >>> assert data_and_columns_to_dict(df)['a'] == [1,3,5]
+    >>> assert data_and_columns_to_dict(dfa)['a'] == [1,3,5]
     >>>
     >>> data = [['a','b'],[1,2],[3,4],[5,6]]; columns = None
     >>> assert list(data_and_columns_to_dict(data, columns)['a']) == [1,3,5]
@@ -337,7 +335,8 @@ def data_and_columns_to_dict(data=None, columns=None):
             else:
                 return {columns : as_list(data)}
         else:
-            return dict(zip(columns, np.asarray(data).T))
+            
+            return dict(zip(columns, args_zip(*data)))
     else:
         if isinstance(data, str):
             data = pd.read_csv(data)
@@ -356,6 +355,3 @@ def data_and_columns_to_dict(data=None, columns=None):
                 return data_and_columns_to_dict(data[1:], data[0])
         else:
             return dict(data)
-
-
-

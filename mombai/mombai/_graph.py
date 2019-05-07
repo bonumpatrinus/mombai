@@ -29,8 +29,14 @@ _is_ref.__doc__ = "checks if a string is a reference, which by convention we pre
 _is_int = lambda s: (s.startswith('-') and s[1:].isdigit()) or s.isdigit()
 _is_int.__doc__ = "checks if a string is either a positive or a negative integer"
 
-_to_id = partial(_per_cell, f = lambda v: '@%s'%(v.id if isinstance(v.node, dict) else v.node))
-_to_id.__doc__ = "Converts a cell into its id. If it was a dict, then an v.id, its hash is used. Otherwise, if it is a single value, use that value as reference"
+def _from_id(value, graph):
+    if is_array(value):
+        return [_from_id(v, graph) for v in value]
+    elif isinstance(value, str) and _is_ref(value):
+        s = value[1:]
+        return graph[s]
+    else:
+        return value
 
 
 class DAG(nx.DiGraph):
@@ -111,16 +117,6 @@ This can be implemented on all networkx graphs
 """ + nx.DiGraph.__doc__                
 
 
-def _from_id(value, graph):
-    if is_array(value):
-        return [_from_id(v, graph) for v in value]
-    elif isinstance(value, str) and _is_ref(value):
-        s = value[1:]
-        return graph[int(s) if _is_int(s) else s]
-    else:
-        return value
-
-
 class XCL(DAG):
     @classmethod
     def _key(self, key):
@@ -133,12 +129,10 @@ class XCL(DAG):
         if _is_edge(key):
             return (self._key(key[0]), self._key(key[1]))
         if _is_ref(key):
-            key = key[1:]
-            if _is_int(key):
-                key = int(key)
+            return self._key(key[1:])
         if isinstance(key, Cell):
             return self._key(key.node)
-        return Hash(key)
+        return str(Hash(key))
 
     @classmethod
     def _as_dict(cls, value):
@@ -153,7 +147,12 @@ class XCL(DAG):
             key = self._key(key)
             self.add_edge(key[0], key[1], **d)
         else:
-            d = self._as_dict(value if isinstance(value, Cell) else Cell(key, value))
+            if not isinstance(value, Cell):
+                value = Cell(function = value, node = key)
+            elif value.node is None: ## special case to allow to inherit name from tag
+                value = copy(value)
+                value.node = key
+            d = self._as_dict(value)
             key = self._key(key)
             self.add_node(key, **d)
 
@@ -161,13 +160,12 @@ class XCL(DAG):
         graph = self
         if isinstance(cell, Cell):
             graph[cell.node] = cell
-            graph = graph + cell.function
-            graph = graph + list(cell.args)
-            graph = graph + list(cell.kwargs.values())
+            graph = graph + cell.inputs
         elif is_array(cell):
             for c in cell:
-                graph = graph + c                 
+                graph = graph + c
         return graph
+            
     
     def to_id(self):
         """
@@ -175,9 +173,9 @@ class XCL(DAG):
         >>> from mombai import *
         >>> from operator import add
         >>> g = XCL()        
-        >>> g['a'] = Cell('a', 1)        
-        >>> g['b'] = Cell('b', 2)
-        >>> g['c'] = Cell('c', add, g['a'], g['b']) 
+        >>> g['a'] = Cell(1)        
+        >>> g['b'] = Cell(2)
+        >>> g['c'] = Cell.f(add, g['a'], g['b']) 
         >>> assert g['c']() == 3
         >>> h = g.to_id()
     
@@ -193,32 +191,17 @@ class XCL(DAG):
         """
         result = deepcopy(self)
         for node in result.nodes:
-            c = copy(result[node])
-            c.function = _to_id(c.function)
-            c.args = _to_id(c.args)
-            c.kwargs = {key : _to_id(value) for key, value in c.kwargs.items()}
-            result[node] = c
+            result[node] = result[node].to_id()
         return result
-
-    def from_id(self):
-        """
-        This converts a graph with variable of references ids into a graph with actual cells in the kwargs and args
-        We do need the graph to already have 
-        """
-        result = deepcopy(self)
-        for node in nx.topological_sort(self):
-            c = result[node]
-            c.function = _from_id(c.function, result)
-            c.args = _from_id(c.args, result)
-            c.kwargs = {key : _from_id(value, result) for key, value in c.kwargs.items()}
-            result[node] = c
-        return result        
+    
+    ref = property(to_id)
             
     def add_parents(self, cell=None, parent=None):
         """
-        Loops through chosen cell and parents and add them to the edges
+        Loops through chosen cell and their parents and add them to the edges
+        The default is to add all parents-child relations
         """
-        graph = self
+        graph = deepcopy(self)
         if cell is None:
             cell = [graph[c] for c in graph.nodes]
         if _is_ref(cell):
@@ -233,10 +216,64 @@ class XCL(DAG):
                 for p in parent:
                     graph = graph.add_parents(cell, p)
             elif parent is None:
-                graph = graph.add_parents(cell, cell.function)
-                graph = graph.add_parents(cell, list(cell.args))
-                graph = graph.add_parents(cell, list(cell.kwargs.values()))
+                graph = graph.add_parents(cell, cell.inputs)
         return graph
+
+    def from_id(self):
+        """
+        This converts a graph with variable of references ids into a graph with actual cells in the kwargs and args
+        We do need the graph to already have 
+        """
+        result = self.add_parents()
+        for node in nx.topological_sort(result):
+            result[node] = result[node].apply(_from_id, result) 
+        return result        
+
+    at = property(from_id)
+    
+    def replace(self, old2new={}, **kwargs):
+        """
+        We map 
+        :old2new a dictionary linking the old ids to new Cells
+        
+        >>> g = XCL()
+        >>> g['a'] = 1
+        >>> g['b'] = Cell.at(lambda a: a + 1)
+        >>> g['c'] = Cell.at(lambda a, b: a+b)
+        >>> g['d'] = Cell.at(lambda a,b,c: a+b+c)
+        >>> g['e'] = Cell.at(lambda a,b,c,d: a+b+c+d)
+        
+        >>> h = g.from_id()
+        >>> assert h['c']() == 3
+        >>> assert h['d']() == 6
+        
+        >>> new = dict(c = Cell.at(lambda a, b: a + 2*b))
+        >>> i = g.replace(new)
+        >>> assert i.at['c']() == 5
+        >>> assert i.at['d']() == 8
+        >>> i = g.replace(c = Cell.cfg(lambda a, b: a * b, 'cc'))
+        >>> assert sorted(i.nodes) == ['a','b','cc','d','e']
+        >>> assert i['cc']() == 2
+        >>> assert i['d']() == 5
+        >>> assert i['d'].kwargs['c'] == i['cc']
+        """
+        old2new.update(kwargs)
+        result = self.to_id()
+        old_id_to_new_id = {old : '@' + old for old in result.nodes}
+        for old_id, new in old2new.items():
+            old = self[old_id]
+            if isinstance(new, Cell):
+                new_id = old_id if new.node is None else new.id 
+                result[new_id] = new
+                if new_id!=old_id:
+                    del result[old_id]
+                    old_id_to_new_id[old_id] = '@' + new_id
+            else:
+                result[old_id] = type(old)(new, node = old.node)
+        for node in result.nodes: # now replace any reference in any of the cells from the old ref to the new ref
+            result[node] = result[node].apply(_from_id, old_id_to_new_id)
+        return result.from_id()
+        
 
     def to_table(self):
         rs = Dictable(node_id = list(nx.topological_sort(self)))
@@ -276,11 +313,10 @@ class XCL(DAG):
         We then add the parental graph
         We finally dereference the nodes
         """
-        minimal = {int(k) if _is_int(k) else k: v for k, v in jp.decode(j).items()}
+        minimal = {k: v for k, v in jp.decode(j).items()}
         res = cls()
         for k, v in minimal.items():
             res[k] = v
-        res = res.add_parents()
         res = res.from_id()
         return res
 

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from mombai._decorators import cache
-from mombai._containers import as_ndarray
+from mombai._containers import as_ndarray, as_list
 
 def _eq_attrs(x, y, attrs):
     for attr in attrs:
@@ -55,11 +55,13 @@ def eq(x, y):
     if x is y:
         return True
     elif isinstance(x, (np.ndarray, tuple, list)):
-        return type(x)==type(y) and len(x)==len(y) and _eq_attrs(x,y, ['__shape__']) and np.all(_veq(x,y))
+        return type(x)==type(y) and len(x)==len(y) and _eq_attrs(x,y, ['__shape__']) and np.all(veq(x,y))
     elif isinstance(x, (pd.Series, pd.DataFrame)):
-        return type(x)==type(y) and _eq_attrs(x,y, attrs = ['__shape__', 'index', 'columns']) and np.all(_veq(x,y))
+        return type(x)==type(y) and _eq_attrs(x,y, attrs = ['__shape__', 'index', 'columns']) and np.all(veq(x,y))
     elif isinstance(x, dict):
         if type(x) == type(y) and len(x)==len(y):
+            if len(x) == 0:
+                return True
             xkey, xval = zip(*sorted(x.items()))
             ykey, yval = zip(*sorted(y.items()))
             return eq(xkey, ykey) and eq(np.array(xval, dtype='object'), np.array(yval, dtype='object'))
@@ -74,7 +76,7 @@ def eq(x, y):
         except Exception:
             return False # if you really have no == supported, the two items are not the same
 
-_veq = np.vectorize(eq)
+veq = np.vectorize(eq)
 
 def _cmparr(*arr):
     """
@@ -185,38 +187,53 @@ class Cmp(object):
         return 'Compare ' + self.value.__repr__()
 
 
-def argsort(seq):
-    return sorted(range(len(seq)), key=seq.__getitem__)
 
+vCmp = np.vectorize(Cmp)
 
-def reverse(values):
-    return values[::-1]
+def as_1d_arrays(values):
+    """
+    if the user provided a columns of same-size np.arrays, we split it into its constituents
+    """
+    if isinstance(values, np.ndarray): 
+        if len(values.shape)==2:
+            values = list(values.T)
+        else:
+            values = [values]
+    res = []
+    for value in values:
+        value = as_ndarray(value)
+        if len(value.shape)==2:
+            res.extend(as_1d_arrays(value))
+        else:
+            res.append(value)
+    return res
 
+def as_cmp(values) :
+    return [vCmp(value) if value.dtype == np.dtype('O') else value for value in values]
+    
 
 def panda_sorter(values):
     cols= list(range(len(values)))
     return pd.DataFrame(data = np.array(values).T, columns = cols).sort_values(by = cols).index.values
 
-vCmp = np.vectorize(Cmp)
-
-
-def as_cmp(values):
-    if isinstance(values, np.ndarray) and len(values.shape)==2:
-        values = list(values.T)
-    res = []
-    for value in values:
-        value = as_ndarray(value)
-        if len(value.shape)==2:
-            res.extend(as_cmp(value))
-        elif value.dtype == np.dtype('O'):
-            res.append(vCmp(value))
-        else:
-            res.append(value)
-    return res
-
 
 class Sort(object):
-    def __init__(self, values, sorter=np.lexsort, transform=None, key = as_cmp):
+    """
+    This class is the main sorting class 
+    
+    `parameters`
+    :values are provided as lists
+    :key is used to transform the values into comparable keys
+    :sorter: The sorting itself is done using self.sorter. This is np.lexsort by default, can use panda_sorter as an alternative
+
+    self.keys is then what is actually sorted and compared, derived as self.key applied to self.values
+    self.argsort is what produces the indexing, applied to self.keys
+    self.sort is then the indexing from argsort applied to any list of values
+    self.sorted is applying self.sort to the original self.values
+    
+    self.grouped uses the actual values to return a list of lists, each element has the same original value.
+    """
+    def __init__(self, values, sorter=np.lexsort, transform=None, key = [as_1d_arrays, as_cmp]):
         self.values = tuple(as_ndarray(v) for v in values)
         if transform: 
             self.values = tuple(transform(v) for v in self.values)
@@ -227,10 +244,10 @@ class Sort(object):
     @property
     @cache
     def keys(self):
-        if self.key is None:
-            return self.values[::-1]
-        else:
-            return self.key(self.values)[::-1] 
+        values = self.values
+        for k in as_list(self.key):
+            values = k(values)
+        return values[::-1]
 
     @property
     @cache
@@ -305,12 +322,44 @@ class Sort(object):
     def __repr__(self):
         return '%s of %s' % (type(self).__name__, self.values.__repr__())
 
+"""
+from here on, this is experimental
+"""
 
-#values = [['10', '2', 2, 1, None, np.array([10,2]), np.array([3,4,5]), np.array([3,4])]]
-#t = Sort(values, argsort, transform = None, key  = _as_keys)
-#t.argsort
+def argsort(seq):
+    return sorted(range(len(seq)), key=seq.__getitem__)
 
-        
+
+
+def reverse(values):
+    return values[::-1]
+
+
+
+    
+
+def lexsorter(values, sorter=np.argsort):
+    """
+    This is a slower version but gives us more control to sort out columns individually 
+    """
+    value = values[0]
+    if len(value)==1:
+        return np.array([0])
+    a = sorter(value)
+    if len(values) ==1:
+        return a
+    s = value[a]
+    changes = ~veq(s[1:], s[:-1])
+    edges = np.arange(1, len(value))[changes]
+    grouped = np.split(a, edges)
+    if len(grouped)==len(value):
+        return a
+    else:
+        vs = values[1:]
+        res = [g[lexsorter([v[g] for v in vs], sorter)] for g in grouped]
+        return np.concatenate(res)
+
+   
 
 
 

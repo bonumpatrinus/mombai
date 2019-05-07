@@ -13,6 +13,8 @@ if version.major < 3:
 else:
     ARGSPEC  = 'fullargspec'
 
+NoneType = type(None)
+
 def argspec_update(argspec, **kwargs):
     """
     Allows us to copy an existing argspec, updating specific parameters specified in kwargs
@@ -73,7 +75,7 @@ def Hash(value):
     _hash of dict and list are implemented
     """
     value = _prehash(value)
-    if isinstance(value, (int, np.int64, np.int32)):
+    if isinstance(value, (int, np.int64, np.int32, np.int64, str, datetime.date, datetime.datetime, float, np.float, np.float16, np.float32, np.float64)):
         return value
     else:
         return hash(value)
@@ -364,3 +366,6 @@ def callitem(obj, item, *args, **kwargs):
     small wrappper to allow us to implement calling of an object attributes
     """
     return obj[item](*args, **kwargs)
+
+            
+        
