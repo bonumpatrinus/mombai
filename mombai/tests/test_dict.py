@@ -15,6 +15,9 @@ def test_Dictattr():
     assert not a == dict(a=1,b=2)
 
 
+def test_Dict__eq__empty():
+    assert Dict() == Dict()
+    
 def test_Dict__add__():
     e = Dict(d = 5, e = 10)
     assert d + e == Dict(a =1, b=2,c=3, d=5, e=10)

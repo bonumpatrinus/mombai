@@ -1,7 +1,31 @@
-from mombai._graph import XCL, DAG, jp, Cell, Hash
+from mombai._graph import XCL, DAG, jp, Hash, _is_ref, _from_id
+from mombai._cell import Cell, Const, MemCell
 from operator import add
+from copy import copy, deepcopy
+from mombai._dictable import Dictable
+import networkx as nx
 
-#q = Query()
+
+def test_XCL_at():
+    g = XCL()
+    g['a'] = Cell(Dictable(a = [1,2,3]))
+    g['a']()
+    g['b'] = Cell.f('@a', b = lambda a: a+1)
+    assert g.at['b']() == Dictable(a = [1,2,3], b =[2,3,4])
+    
+def test_Cell_at():
+    g = XCL()
+    g['a'] = 1
+    b = lambda a: a+1
+    assert Cell.at(b) == Cell.f(b, a = '@a')
+    g['b'] = Cell.at(b)
+    assert g['b'] == Cell.cfg(Cell.f(b, a = '@a'), 'b')
+    g['c'] = Cell.at(lambda a, b: a + b)
+    assert g.at['b']() == 2
+    assert g.at['c']() == 3
+#    g.at['c']
+#    g.from_id()['c'].kwargs
+#    g.at#q = Query()
 #db.insert(dict(a = 1, b = 'key'))
 #db.insert(dict(a = 2, b = 'key'))
 #db.all()
@@ -84,24 +108,22 @@ def test_DAG_remove_edge():
 
 def test_XCL_key():
     g = XCL()
-    g['a'] = Cell('a', 1)
-    ha = Hash('a')
-    assert list(g.nodes) == [ha]
-    g[0] = Cell(0, 0) ## index by an integer 0
-    assert list(g.nodes) == [ha, 0]
+    g['a'] = Cell(1)
+    assert list(g.nodes) == ['a']
+    g[0] = Cell(0) ## index by an integer 0
+    ha = 'a'
+    assert list(g.nodes) == ['a', '0']
     assert g._key('a') == ha
     assert g._key('@a') == ha
     assert g._key(ha) == ha
-    assert g._key('@%i'%ha) == ha
     assert g._key(g['a']) == ha
-    assert g._key(('a', 0)) == (ha, 0)
+    assert g._key(('a', 0)) == (ha, '0')
     assert '@a' in g
     assert 'a' in g
-    assert ha in g
 
 def test_XCL_key_dict():
     g = XCL()
-    cell = Cell(dict(a=1, b=2, c=3), 0)
+    cell = Cell(0, node = dict(a=1, b=2, c=3))
     g[cell] = cell
     assert g[ {'a': 1, 'b': 2, 'c': 3}] == cell
     del g[ {'a': 1, 'b': 2, 'c': 3}]
@@ -109,12 +131,12 @@ def test_XCL_key_dict():
 
 def test_XCL_add():
     from operator import add
-    a = Cell(0, 0)
-    b = Cell(1, 1)
-    c = Cell(2, 2)
-    d = Cell(3, add, a, b)
-    e = Cell(4, add, c, d)
-    f = Cell(5, sum, [a,b,c,d,e])    
+    a = Cell.cfg(0, 0)
+    b = Cell.cfg(1, 1)
+    c = Cell.cfg(2, 2)
+    d = Cell(add, (a, b), {}, 3)
+    e = Cell(add, (c, d), {}, 4)
+    f = Cell.f(sum, [a,b,c,d,e], 0)    
     assert a() == 0
     assert b() == 1
     assert c() == 2
@@ -128,15 +150,16 @@ def test_XCL_add():
     assert b in g and c in g
     g += f
     assert d in g and e in g and f in g
+    f.inputs
     assert g[f]() == 7
 
 def test_XCL_to_from_id():
-    a = Cell(0, 0)
-    b = Cell(1, 1)
-    c = Cell(2, 2)
-    d = Cell(3, add, a, b)
-    e = Cell(4, add, c, d)
-    f = Cell(5, sum, [a,b,c,d,e])    
+    a = Cell.cfg(0, 0)
+    b = Cell.cfg(1, 1)
+    c = Cell.cfg(2, 2)
+    d = Cell(add, (a, b), node = 3)
+    e = Cell(add, (c, d), node = 4)
+    f = Cell(sum, ([a,b,c,d,e], 0), node = 5)   
     g = XCL()
     g+= f
     h = g.to_id()
@@ -146,32 +169,32 @@ def test_XCL_to_from_id():
     assert i[f].args[0] == [i[a],i[b],i[c],i[d], i[e]]
 
 def test_XCL_to_from_id_different_id_types():
-    a = Cell(0, 0)
-    b = Cell('b', 1)
-    c = Cell(dict(a=1,b=2), 2)
-    d = Cell(3, add, a, b)
-    e = Cell(4, add, c, d)
-    f = Cell(5, sum, [a,b,c,d,e])    
+    a = Cell.cfg(0, 0)
+    b = Cell.cfg(1, 1)
+    c = Cell.cfg(2, 2)
+    d = Cell(add, (a, b), node = 3)
+    e = Cell(add, (c, d), node = 4)
+    f = Cell(sum, ([a,b,c,d,e], 0), node = 5)   
     g = XCL()
     g+= f
     h = g.to_id()
     i = h.from_id()
     assert g[f].args[0] == [a,b,c,d,e]
-    assert h[f].args[0] == ['@0','@b','@%i'%c.id, '@3' ,'@4']
+    assert h[f].args[0] == ['@0','@1','@%s'%c.id, '@3' ,'@4']
     assert i[f].args[0] == [i[a],i[b],i[c],i[d], i[e]]
 
 
 def test_XCL_to_json():
-    a = Cell(0, 0)
-    b = Cell(1, 1)
-    c = Cell(2, 2)
-    d = Cell(3, add, a, b)
-    e = Cell(4, add, c, d)
-    f = Cell(5, sum, [a,b,c,d,e])    
+    a = Cell.cfg(0, 0)
+    b = Cell.cfg(1, 1)
+    c = Cell.cfg(2, 2)
+    d = Cell(add, (a, b), node = 3)
+    e = Cell(add, (c, d), node = 4)
+    f = Cell(sum, ([a,b,c,d,e], 0), node = 5)   
     g = XCL()
     g+= f
     j = g.to_json()
-    assert '[["@0", "@1", "@2", "@3", "@4"]]' in j 
+    assert '["@0", "@1", "@2", "@3", "@4"]' in j 
     assert '["@2", "@3"]' in j
     assert '["@0", "@1"]' in j
     assert 'add' in j
@@ -181,13 +204,33 @@ def test_XCL_to_json():
     assert i[f].args[0] == [i[a],i[b],i[c],i[d], i[e]]
 
 def test_XCL_to_table():
-    a = Cell(0, 0)
-    b = Cell(1, 1)
-    c = Cell(2, 2)
-    d = Cell(3, add, a, b)
-    e = Cell(4, add, c, d)
-    f = Cell(5, sum, [a,b,c,d,e])    
+    a = Cell.cfg(0, 0)
+    b = Cell.cfg(1, 1)
+    c = Cell.cfg(2, 2)
+    d = Cell(add, [a, b], node = 3)
+    e = Cell(add, [c, d], node = 4)
+    f = Cell(sum, ([a,b,c,d,e]), node = 5)    
     g = XCL()
     g+= f
     j = g.to_table()
     assert len(j) == len(g._node) and j.keys() == ['node_id', 'node', 'function', 'args', 'kwargs']    
+    
+def test_XCL_replace():
+    g = XCL()
+    g['a'] = 1
+    g['b'] = Cell.at(lambda a: a + 1)
+    g['c'] = Cell.at(lambda a, b: a+b)
+    g['d'] = Cell.at(lambda a,b,c: a+b+c)
+    g['e'] = Cell.at(lambda a,b,c,d: a+b+c+d)    
+    h = g.from_id()
+    assert h['c']() == 3
+    assert h['d']() == 6    
+    new = dict(c = Cell.at(lambda a, b: a + 2*b))
+    i = g.replace(new)
+    assert i.at['c']() == 5
+    assert i.at['d']() == 8
+    i = g.replace(c = Cell.cfg(lambda a, b: a * b, 'cc'))
+    assert sorted(i.nodes) == ['a','b','cc','d','e']
+    assert i['cc']() == 2
+    assert i['d']() == 5
+    assert i['d'].kwargs['c'] == i['cc']

@@ -29,6 +29,11 @@ def test_argspec_n_one():
     func_no_args = lambda x, y=1:1  
     assert getargs(func_no_args , n=1) == ['y']
 
+def test_hash_seed_zero():
+    if hash('a') != -7583489610679606711:
+        raise ValueError('hash function is using a random seed, please set PYTHONHASHSEED=0 in environment variables')
+    
+
 def test_decorate():
     def test_function(x,y,z):
         """

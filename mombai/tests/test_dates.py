@@ -32,9 +32,12 @@ def test_dt():
     assert dt(datetime.date(2001,9,1)) == D(2001,9,1)
     assert dt(0) == today()
     assert dt(-1) == today() - day
+    assert dt(1000) == today() + 1000 * day
+    assert dt(2000) == dt(2000,1,1)
     assert dt(bday) == today() + bday
     assert dt(month) == today() + month
     assert dt(datetime.timedelta(7)) == today() + datetime.timedelta(7)
+    assert dt() > dt(0)
 
 def test_dt_today():
     assert dt.today() == today()
