@@ -17,7 +17,7 @@ if False:
     db.all()
     db.remove
     db.remove(q.a.exists())
-    db.search(q.a >= 1)
+    db.search(q.a == 1)
     db.all()
 
 def _is_edge(key):

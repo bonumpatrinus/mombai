@@ -1,3 +1,6 @@
+import h5py
+import pandas as pd
+import os
 import numpy as np
 import jsonpickle as jp
 import datetime
@@ -6,18 +9,32 @@ from mombai._decorators import Hash, getargs, getargspec, dict_loop, try_none
 from mombai._dates import dt, fraction_of_day, seconds_of_day, timedelta_of_day
 from mombai._dict import Dict
 from mombai._dict_utils import items_to_tree, tree_items
+from mombai._db import db_update
 from functools import partial
 from copy import copy
 from inspect import FullArgSpec
+from concurrent.futures import Future
 
+def as_df(value):
+    return pd.DataFrame(value)
 
 def _per_cell(value, f):
-    if is_array(value):
+    if is_array(value) and not callable(value):
         return type(value)([_per_cell(v, f) for v in value])
+    elif isinstance(value, dict) and not callable(value): 
+        return type(value)({key: _per_cell(v, f) for key,v in value.items()})
     elif isinstance(value, Cell):
         return f(value)
     else:
         return value
+    
+def date2key(*date):
+    d = dt(*date)
+    return ('D%s'%d).replace('-','').replace(':','').replace('.','_').replace(' ','T')
+
+def key2date(key):
+    return datetime.datetime(*[int(k) for k in [key[1:5],key[5:7], key[7:9], key[10:12], key[12:14], key[14:16], key[17:]]])
+
 
 @try_none
 def _getargspec(function):
@@ -25,12 +42,12 @@ def _getargspec(function):
     if res.args and res.args[0] in ('cls','self'):
         res = FullArgSpec(args=res.args[1:], varargs=res.varargs, varkw=res.varkw, defaults=res.defaults, kwonlyargs=res.kwonlyargs, kwonlydefaults=res.kwonlydefaults, annotations=res.annotations)
     return res
-        
-_to_id = partial(_per_cell, f = lambda v: '@%s'%(v.id if isinstance(v.node, dict) else v.node))
+
+_to_id = partial(_per_cell, f = lambda v: v if v.node is None else '@%s'%(v.id if isinstance(v.node, dict) else v.node))
 _to_id.__doc__ = "Converts a cell into its id. If it was a dict, then an v.id, its hash is used. Otherwise, if it is a single value, use that value as reference"
 _dict_to_node = lambda d: None if d is None or len(d) == 0 else d['node'] if len(d)==1 and 'node' in d else d
 _node_to_dict = lambda n: Dict({} if n is None else n if isinstance(n, dict) else {'node' : n})
-_call = partial(_per_cell, f = lambda v: v())
+_call = partial(_per_cell, f = lambda v: v.result())
 
 
 def _as_asof(asof):
@@ -121,8 +138,12 @@ class Cell(object):
     :args
     :kwargs
     
-    We provide a two-stage construction 
-    :'__init__' and 'at', both construct just the function(*args, **kwargs) bit
+    We provide multiple constructions 
+    :'__init__' just pass what is needed
+    :'at'       use the function signature to deduce inputs.
+    :'f'
+    :'cfg'
+    and 'at', both construct just the function(*args, **kwargs) bit
     :'new'
     """
     def __init__(self, function, args=(), kwargs={}, node=None, config={}):
@@ -205,6 +226,13 @@ class Cell(object):
         res.kwargs = k
         return res
 
+    def result(self):
+        """
+        some support for calling with Future objects, which, like cell, are "Future values"
+        """
+        rtn = self()
+        return rtn.result() if isinstance(rtn, Future) else rtn            
+
     def __call__(self):
         f,a,k = self._apply(_call)
         if not callable(f):
@@ -233,6 +261,7 @@ class Cell(object):
         """
         return str(Hash(self.node))
     
+    @property
     def metadata(self):
         res = Dict()
         res['id'] = self.id
@@ -246,6 +275,21 @@ class Cell(object):
     def to_id(self):
         f, a, k = self._apply(_to_id)
         return type(self)(f, a, k, node = self.node, config = self.config)
+    
+
+    def to_db(self, db = None):
+        """
+        We save the metadata, not the values
+        >>> from operator import add
+        c = Cell.cfg(Cell.f(add, 1, 2), 'test')
+        c.to_db()
+        db.all() 
+        """
+        db = self.config.get('db', 'db.meta')
+        if self.node is None:
+            raise ValueError('Cannot save to db without the node being set')
+        db_update(db, self.metadata, key = 'id')
+        return self
 
     def __add__(self, rhs):
         """
@@ -294,20 +338,13 @@ class MemCell(Cell):
 
     def __init__(self, function, args=(), kwargs={}, node=None, config={}):
         super(MemCell, self).__init__(function, args, kwargs, node, config)
-        self.cache = self._load_cache()
-        
-#   f = Cell.f
-#    @classmethod
-#    def f(cls, function, *args, **kwargs):
-#        f,a,k = _as_fak_strict(function, args, kwargs)
-#        return cls(f,a,k)
+        self.cache = self.load_cache()
 
-
-    def _load_cache(self):
+    def load_cache(self):
         """ for a file-based or db-based cache, we can implement this"""
         return Dict()
 
-    def _to_cache(self, cache):
+    def to_cache(self, cache):
         """ for a file-based or db-based cache, we can implement this"""
         return cache
     
@@ -330,7 +367,42 @@ class MemCell(Cell):
         return 'MemCell.last_updated=%s\n'%self.last_updated() + super(MemCell, self).__repr__()
 
 
+class HDFCell(MemCell):
+    """
+    """
+    def load_cache(self):
+        """ for a file-based or db-based cache, we can implement this"""
+        return Dict()
 
+    def to_cache(self, cache):
+        """ for a file-based or db-based cache, we can implement this"""
+        return cache
+    
+    @property
+    def path(self):
+        return self.config.get('path', 'D:\\data')
+    
+    def _to_cache(self, mode = 'a', **kwargs):
+        """
+        Saves the latest value to the cache
+        """
+        p = os.path.join(self.path, self.id + '.hdf5')
+        last_updated = self.last_updated()
+        df = as_df(self.cache[last_updated])
+        k = date2key(last_updated)
+        df.to_hdf(p, k, mode = mode, **kwargs)
+
+    def _load_cache(self):
+        p = os.path.join(self.path, self.id + '.hdf5')
+        if os.path.isfile(p):
+            f = h5py.File(p, 'r')
+            key = sorted(f.keys())[-1]
+            df = pd.read_hdf(p, key)
+            return {key2date(key) : df}
+        else:
+            return {}
+
+        
 class Const(Cell):
     """calculate once"""
     def update(self):
