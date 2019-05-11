@@ -173,8 +173,9 @@ def test_Cell_to_id():
 
 def test_Cell_to_db():
     cell = Cell.cfg(lambda a: a+1, 'test', ccy='USD')
-    cell.to_db('db.test')    
     db = TinyDB('db.test')    
+    db.purge()
+    cell.to_db('db.test')
     cell.to_db(db)
     assert len(db.all())==1
     db.purge()
