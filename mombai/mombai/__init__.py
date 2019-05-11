@@ -8,5 +8,5 @@ from mombai._dict import Dict
 from mombai._dictable import Dictable, cartesian
 from mombai._periods import day, week, month, bday, Month, BusinessDay, is_weekend, is_eom
 from mombai._dates import dt, today, as_mm
-from mombai._cell import Cell, MemCell, EODCell, Const
+from mombai._cell import Cell, MemCell, EODCell, Const, HDFCell
 from mombai._graph import DAG, XCL

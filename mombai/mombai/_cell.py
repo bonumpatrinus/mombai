@@ -285,7 +285,9 @@ class Cell(object):
         c.to_db()
         db.all() 
         """
-        db = self.config.get('db', 'db.meta')
+        db = db or self.config.get('db')
+        if db is None:
+            raise ValueError('Cannot save to db without the database being set at config or passed')
         if self.node is None:
             raise ValueError('Cannot save to db without the node being set')
         db_update(db, self.metadata, key = 'id')
@@ -369,30 +371,34 @@ class MemCell(Cell):
 
 class HDFCell(MemCell):
     """
-    """
-    def load_cache(self):
-        """ for a file-based or db-based cache, we can implement this"""
-        return Dict()
-
-    def to_cache(self, cache):
-        """ for a file-based or db-based cache, we can implement this"""
-        return cache
-    
+    """    
     @property
     def path(self):
         return self.config.get('path', 'D:\\data')
     
-    def _to_cache(self, mode = 'a', **kwargs):
+    def to_cache(self, mode = 'a', **kwargs):
         """
         Saves the latest value to the cache
         """
         p = os.path.join(self.path, self.id + '.hdf5')
         last_updated = self.last_updated()
-        df = as_df(self.cache[last_updated])
-        k = date2key(last_updated)
-        df.to_hdf(p, k, mode = mode, **kwargs)
+        last_cached = self.last_cached()
+        if last_cached is None or last_updated!=last_cached:
+            df = as_df(self.cache[last_updated])
+            k = date2key(last_updated)
+            df.to_hdf(p, k, mode = mode, **kwargs)
+        return self
 
-    def _load_cache(self):
+    def last_cached(self):
+        p = os.path.join(self.path, self.id + '.hdf5')
+        if os.path.isfile(p):
+            f = h5py.File(p, 'r')
+            key = sorted(f.keys())[-1]
+            return key2date(key)
+        else:
+            return None
+
+    def load_cache(self):
         p = os.path.join(self.path, self.id + '.hdf5')
         if os.path.isfile(p):
             f = h5py.File(p, 'r')
@@ -438,7 +444,7 @@ class Const(Cell):
         return 'Const \n%s'%self.function 
 
 
-class EODCell(MemCell):
+class EODCell(HDFCell):
     """
     Calculate on update or on a new day. If eod is provided (in seconds), will "reset" at that time
     """
