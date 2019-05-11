@@ -1,9 +1,14 @@
 from operator import mul, add
 import datetime
 from mombai._dict import Dict
-from mombai._cell import Cell, MemCell, Const, getargspec, passthru, _call
+from mombai._cell import Cell, MemCell, HDFCell, Const, getargspec, passthru, _call
 from mombai._dates import dt
+from tinydb import TinyDB, Query
 import pytest
+import jsonpickle as jp
+
+q = Query()
+
 
 def test_Cell_init_with_const():
     x = Cell(1)
@@ -164,3 +169,25 @@ def test_Cell_to_id():
     assert d() == '@a@b'
     assert d.config == Dict(eod = 3)
     assert d.node is None
+
+
+def test_Cell_to_db():
+    cell = Cell.cfg(lambda a: a+1, 'test', ccy='USD')
+    cell.to_db('db.test')    
+    db = TinyDB('db.test')    
+    cell.to_db(db)
+    assert len(db.all())==1
+    db.purge()
+    def f(a,b):
+        return a+b
+    cell = Cell.cfg(f, dict(ccy = 'USD', tenor = '10Y'))
+    with pytest.raises(ValueError):
+        cell.to_db()
+    cell.to_db('db.test')
+    r = db.search(q.node.ccy == 'USD' and q.id == cell.id)[0]
+    d = jp.decode(r['json'])
+    assert d() == '@a@b'
+    db.purge()
+    c = Cell.at(f)
+    with pytest.raises(ValueError):
+        c.to_db()
