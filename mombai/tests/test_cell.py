@@ -179,16 +179,14 @@ def test_Cell_to_db():
     cell.to_db(db)
     assert len(db.all())==1
     db.purge()
-    def f(a,b):
-        return a+b
-    cell = Cell.cfg(f, dict(ccy = 'USD', tenor = '10Y'))
+    cell = Cell(add, (1,2), node = dict(ccy = 'USD', tenor = '10Y'))
     with pytest.raises(ValueError):
         cell.to_db()
     cell.to_db('db.test')
     r = db.search(q.node.ccy == 'USD' and q.id == cell.id)[0]
     d = jp.decode(r['json'])
-    assert d() == '@a@b'
+    assert d() == 3
     db.purge()
-    c = Cell.at(f)
+    c = Cell(add, (1,2))
     with pytest.raises(ValueError):
         c.to_db()
